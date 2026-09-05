@@ -126,6 +126,41 @@ def create_ocr_for_platform(config_dict):
     return create_universal_ocr(config_dict)
 
 
+def create_ocr_instance(config_dict):
+    """Build the OCR engine for this run, or None when disabled/unavailable.
+
+    Same selection as the old inline code in main(): platform/universal model
+    first, then the stock ddddocr model with set_ranges(1).
+    """
+    if not config_dict.get("ocr_captcha", {}).get("enable", False):
+        return None
+    try:
+        ocr = create_ocr_for_platform(config_dict)
+        if ocr is None:
+            ocr = ddddocr.DdddOcr(show_ad=False, beta=config_dict["ocr_captcha"]["beta"])
+            ocr.set_ranges(1)
+        return ocr
+    except Exception as exc:
+        debug = util.create_debug_logger(config_dict)
+        debug.log(f"[OCR INIT] Failed to initialize OCR: {exc}")
+        return None
+
+
+async def create_ocr_instance_async(config_dict):
+    """Load the OCR model in a worker thread.
+
+    Model loading is CPU-bound (onnxruntime session build, ~0.15s for the
+    stock model) while browser start-up is I/O-bound (spawn Chrome, wait for
+    the CDP port), so main() kicks this off before uc.start() and awaits it
+    after the homepage is up. Measured saving is small (benchmarks/
+    bench_startup.py) but it removes the model load from the critical path
+    for free. No warm-up inference: the first classification was measured
+    at ~3ms cold, so there is nothing to pre-pay.
+    """
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, create_ocr_instance, config_dict)
+
+
 # ===== Config Loading =====
 
 def get_config_dict(args):
@@ -246,16 +281,90 @@ def send_telegram_notification(config_dict, stage, platform_name):
 
 
 # ===== DOM Tools =====
+#
+# Fast-path helpers. zendriver's tab.query_selector() first pulls the whole
+# document with DOM.getDocument(depth=-1, pierce=True) and walks it in Python
+# before it can return an Element, and Element.click() then needs
+# DOM.resolveNode + DOM.getContentQuads + a "flash" script injection before
+# the actual click. For a bot that polls every 50ms, the existence check and
+# the click are the two operations on the critical path, so they are done
+# here with a single Runtime.evaluate (returnByValue) each: one round-trip,
+# a few bytes back, nothing injected into the page.
+
+def _js_selector(selector):
+    """Embed a CSS selector as a safe JS string literal."""
+    return json.dumps(selector)
+
+
+async def nodriver_dom_exists(tab, selector):
+    """True when document.querySelector(selector) finds a node. One CDP call."""
+    if not tab:
+        return False
+    try:
+        result = await tab.evaluate(
+            f"!!document.querySelector({_js_selector(selector)})"
+        )
+        return bool(result)
+    except Exception:
+        return False
+
+
+async def nodriver_dom_click(tab, selector, index=0):
+    """Click the index-th match of selector via element.click(). One CDP call.
+
+    Returns True when a node was found and clicked.
+    """
+    if not tab:
+        return False
+    try:
+        result = await tab.evaluate(
+            "(function(){"
+            f"const els=document.querySelectorAll({_js_selector(selector)});"
+            f"const el=els[{int(index)}];"
+            "if(!el) return false; el.click(); return true;})()"
+        )
+        return bool(result)
+    except Exception:
+        return False
+
+
+async def nodriver_dom_outer_html(tab, selector):
+    """outerHTML of the first match, or "" when absent. One CDP call."""
+    if not tab:
+        return ""
+    try:
+        result = await tab.evaluate(
+            "(function(){"
+            f"const el=document.querySelector({_js_selector(selector)});"
+            "return el ? el.outerHTML : '';})()"
+        )
+        return result if isinstance(result, str) else ""
+    except Exception:
+        return ""
+
+
+async def nodriver_wait_for_selector(tab, selector, timeout=10.0, poll_interval=0.05):
+    """Wait until selector matches. Returns True when found, False on timeout.
+
+    zendriver's tab.wait_for() re-runs query_selector (a full DOM dump) and
+    sleeps 0.5s between probes, so an element that appears right after a
+    probe is noticed up to 500ms late. This polls a one-call existence check
+    every poll_interval (50ms by default, the same cadence as the main loop).
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + max(0.0, float(timeout))
+    while True:
+        if await nodriver_dom_exists(tab, selector):
+            return True
+        if loop.time() >= deadline:
+            return False
+        await asyncio.sleep(poll_interval)
+
 
 async def nodriver_press_button(tab, select_query):
     if tab:
         try:
-            element = await tab.query_selector(select_query)
-            if element:
-                await element.click()
-            else:
-                #print("element not found:", select_query)
-                pass
+            await nodriver_dom_click(tab, select_query)
         except Exception as e:
             print(f"[BUTTON] click fail for {select_query}: {e}")
             pass
@@ -370,14 +479,11 @@ async def nodriver_check_checkbox(tab, selector, max_retries=2):
 async def nodriver_get_text_by_selector(tab, my_css_selector, attribute='innerHTML'):
     div_text = ""
     try:
-        div_element = await tab.query_selector(my_css_selector)
-        if div_element:
-            #js_attr = await div_element.get_js_attributes()
-            div_text = await div_element.get_html()
+        div_text = await nodriver_dom_outer_html(tab, my_css_selector)
 
-            # only this case to remove tags
-            if attribute=="innerText":
-                div_text = util.remove_html_tags(div_text)
+        # only this case to remove tags
+        if div_text and attribute=="innerText":
+            div_text = util.remove_html_tags(div_text)
     except Exception as exc:
         print("find verify textbox fail")
         pass
@@ -385,15 +491,7 @@ async def nodriver_get_text_by_selector(tab, my_css_selector, attribute='innerHT
     return div_text
 
 async def nodriver_check_modal_dialog_popup(tab):
-    ret = False
-    try:
-        el_div = await tab.query_selector('div.modal-dialog > div.modal-content')
-        if el_div:
-            ret = True
-    except Exception as exc:
-        print(exc)
-        pass
-    return ret
+    return await nodriver_dom_exists(tab, 'div.modal-dialog > div.modal-content')
 
 def convert_remote_object(obj, depth=0):
     """
@@ -531,17 +629,29 @@ def reset_url_error_state():
     return recovered
 
 
+CONST_CURRENT_URL_JS = "String(window.location.href)"
+
+
 async def nodriver_current_url(tab, config_dict=None):
+    """Return (url, is_quit_bot) for the tab.
+
+    Hot path: the main loop calls this every 50ms. It is a single
+    Runtime.evaluate with returnByValue, so one CDP round-trip carrying the
+    URL string. (The previous js_dumps() approach enumerated the string
+    character-by-character plus every String.prototype member, then rebuilt
+    the URL in Python from ~120 nested dicts on every poll.)
+    """
     debug = util.create_debug_logger(config_dict)
     is_quit_bot = False
 
     url = ""
     if tab:
-        url_dict = {}
         try:
-            url_dict = await asyncio.wait_for(
-                tab.js_dumps('window.location.href'), timeout=5.0
+            value = await asyncio.wait_for(
+                tab.evaluate(CONST_CURRENT_URL_JS), timeout=5.0
             )
+            if isinstance(value, str):
+                url = value
         except asyncio.TimeoutError:
             # js_dumps blocks when JS execution is suspended (alert dialog,
             # navigation, tab throttling, or a Cloudflare full-page interstitial)
@@ -581,14 +691,6 @@ async def nodriver_current_url(tab, config_dict=None):
                 print("[URL ERROR] The bot cannot read the page URL and will keep "
                       "idling. Please close the browser and restart the bot.")
 
-        url_array = []
-        if url_dict:
-            for k in url_dict:
-                if k.isnumeric():
-                    if "0" in url_dict[k]:
-                        url_array.append(url_dict[k]["0"])
-            url = ''.join(url_array)
-
         if len(url) > 0:
             recovered = reset_url_error_state()
             if recovered > 0:
@@ -608,6 +710,27 @@ async def nodriver_resize_window(tab, config_dict):
 
 
 # ===== Cloudflare Handling =====
+
+# Note: "cloudflare" alone is too broad (matches CDN/analytics scripts)
+CONST_CF_HTML_INDICATORS = [
+    "cf-browser-verification",
+    "cf-challenge-running",
+    "cf-spinner-allow-5-secs",
+    "checking your browser",
+    "please wait while we verify",
+    "verify you are human",
+]
+
+# Returns "dom" | "html" | "" so the caller only receives a short verdict.
+CONST_CF_DETECT_JS = (
+    "(function(){"
+    "if(document.querySelector('iframe[src*=\"challenges.cloudflare.com\"]')"
+    "||document.querySelector('.cf-turnstile')) return 'dom';"
+    "var h=(document.documentElement?document.documentElement.outerHTML:'').toLowerCase();"
+    "var kws=" + json.dumps(CONST_CF_HTML_INDICATORS) + ";"
+    "for(var i=0;i<kws.length;i++){if(h.indexOf(kws[i])>=0) return 'html';}"
+    "return '';})()"
+)
 
 async def detect_cloudflare_challenge(tab, show_debug=False):
     """
@@ -634,39 +757,18 @@ async def detect_cloudflare_challenge(tab, show_debug=False):
         except Exception:
             pass
 
-        # Layer 2: JS DOM detection (fast, catches some cases)
-        try:
-            cf_dom = await tab.evaluate(
-                '!!(document.querySelector(\'iframe[src*="challenges.cloudflare.com"]\')'
-                ' || document.querySelector(\'.cf-turnstile\'))'
-            )
-            if cf_dom:
-                debug.log("[CF DETECT] Cloudflare DOM element found")
-                return True
-        except Exception:
-            pass
-
-        # Layer 3: HTML keyword detection (full-page interstitial fallback)
-        html_content = await tab.get_content()
-        if not html_content:
-            return False
-
-        html_lower = html_content.lower()
-
-        # Note: "cloudflare" alone is too broad (matches CDN/analytics scripts)
-        cloudflare_indicators = [
-            "cf-browser-verification",
-            "cf-challenge-running",
-            "cf-spinner-allow-5-secs",
-            "checking your browser",
-            "please wait while we verify",
-            "verify you are human",
-        ]
-
-        detected = any(indicator in html_lower for indicator in cloudflare_indicators)
-        if detected:
+        # Layer 2 + 3 in one Runtime.evaluate: DOM element check, then keyword
+        # scan of the page HTML done in-page so only a tiny verdict crosses the
+        # wire (previously DOM.getDocument + DOM.getOuterHTML shipped the whole
+        # document back just to run .lower() and a substring search on it).
+        result = await tab.evaluate(CONST_CF_DETECT_JS)
+        if result == "dom":
+            debug.log("[CF DETECT] Cloudflare DOM element found")
+            return True
+        if result == "html":
             debug.log("[CF DETECT] Cloudflare keywords found in HTML")
-        return detected
+            return True
+        return False
 
     except Exception as exc:
         debug.log(f"Cloudflare detection error: {exc}")

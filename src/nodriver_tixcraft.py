@@ -653,7 +653,12 @@ async def main(args):
 
     driver = None
     tab = None
+    ocr_task = None
     if not config_dict is None:
+        # Start loading the OCR model now (worker thread) so it overlaps with
+        # the browser launch + homepage navigation below instead of running
+        # after them. Awaited once the browser is ready.
+        ocr_task = asyncio.ensure_future(create_ocr_instance_async(config_dict))
         sandbox = False
         conf = get_extension_config(config_dict, args)
         nodriver_overwrite_prefs(conf)
@@ -709,15 +714,12 @@ async def main(args):
     last_paused_state = False  # Track pause state changes
 
     ocr = None
-    try:
-        if config_dict["ocr_captcha"]["enable"]:
-            ocr = create_ocr_for_platform(config_dict)
-            if ocr is None:
-                ocr = ddddocr.DdddOcr(show_ad=False, beta=config_dict["ocr_captcha"]["beta"])
-                ocr.set_ranges(1)
-    except Exception as exc:
-        debug = util.create_debug_logger(config_dict)
-        debug.log(f"[OCR INIT] Failed to initialize OCR: {exc}")
+    if ocr_task is not None:
+        try:
+            ocr = await ocr_task
+        except Exception as exc:
+            debug = util.create_debug_logger(config_dict)
+            debug.log(f"[OCR INIT] Failed to initialize OCR: {exc}")
 
     maxbot_last_reset_time = time.time()
     # Phase 3: liveness heartbeat. Touch instances/<id>/heartbeat.txt every few
