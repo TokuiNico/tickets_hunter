@@ -4004,7 +4004,7 @@ async def nodriver_udn_seat_auto_select(tab, config_dict):
 
     try:
         import json
-        result = await tab.evaluate(f'''
+        result = await tab.evaluate(rf'''
             (function() {{
                 const ticketNumber = {ticket_number};
                 const showDebug = {json.dumps(show_debug)};

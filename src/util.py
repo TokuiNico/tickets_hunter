@@ -64,6 +64,11 @@ def get_app_root():
     # Cached: neither sys.frozen nor __file__ changes during a run, and this
     # is called several times per 50ms main-loop tick via the state-file paths.
     app_root = ""
+    # Explicit override (tests, multi-checkout setups): point config/state
+    # files at another directory without touching the source tree.
+    env_root = os.environ.get("TICKETS_HUNTER_APP_ROOT", "")
+    if env_root and os.path.isdir(env_root):
+        return os.path.abspath(env_root)
     if hasattr(sys, 'frozen'):
         # Frozen executable (PyInstaller)
         basis = sys.executable

@@ -113,12 +113,12 @@ async def nodriver_funone_verify_login(tab, config_dict):
 
     # Only print when login status changes (reduce repetitive messages)
     if is_logged_in:
-        if _state.get("last_login_status") != True:
+        if _state.get("last_login_status") is not True:
             debug.log("[FUNONE] Login status verified - logged in")
             _state["last_login_status"] = True
         return True
 
-    if _state.get("last_login_status") != False:
+    if _state.get("last_login_status") is not False:
         debug.log("[FUNONE] Not logged in - waiting for manual OTP login")
         _state["last_login_status"] = False
     return False
@@ -940,7 +940,7 @@ async def nodriver_funone_assign_ticket_number(tab, config_dict):
                 while (container && depth < 5) {{
                     rowText = container.textContent || '';
                     // Check if this container has ticket info (price pattern)
-                    if (/TWD|NT\$|\d+元/.test(rowText)) {{
+                    if (/TWD|NT\\$|\\d+元/.test(rowText)) {{
                         break;
                     }}
                     container = container.parentElement;
@@ -1046,7 +1046,7 @@ async def nodriver_funone_assign_ticket_number(tab, config_dict):
                 let rowText = '';
                 while (container && depth < 5) {{
                     rowText = container.textContent || '';
-                    if (/TWD|NT\$|\d+\u5143/.test(rowText)) break;
+                    if (/TWD|NT\\$|\\d+\u5143/.test(rowText)) break;
                     container = container.parentElement;
                     depth++;
                 }}
@@ -1386,7 +1386,7 @@ async def nodriver_funone_detect_step(tab):
         int: Step number (1=Area, 2=Quantity, 3=Form, 4=Payment, 5=Complete, 0=Unknown)
     """
     try:
-        detect_step_js = '''
+        detect_step_js = r'''
         (function() {
             const url = window.location.href;
             const bodyText = document.body.textContent || '';

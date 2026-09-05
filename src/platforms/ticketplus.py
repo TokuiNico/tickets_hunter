@@ -233,7 +233,7 @@ async def nodriver_ticketplus_account_sign_in(tab, config_dict):
         if el_account:
             await el_account.click()
             await el_account.apply('function (element) {element.value = ""; } ')
-            await el_account.send_keys(ticketplus_account);
+            await el_account.send_keys(ticketplus_account)
             is_account_assigned = True
     except Exception as exc:
         debug.log(f"[TICKETPLUS SIGNIN] account input error: {exc}")
@@ -246,7 +246,7 @@ async def nodriver_ticketplus_account_sign_in(tab, config_dict):
                 debug.log("[TICKETPLUS SIGNIN] Entering password...")
                 await el_password.click()
                 await el_password.apply('function (element) {element.value = ""; } ')
-                await el_password.send_keys(ticketplus_password);
+                await el_password.send_keys(ticketplus_password)
                 await asyncio.sleep(random.uniform(0.1, 0.3))
                 is_filled_form = True
 
