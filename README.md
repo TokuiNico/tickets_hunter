@@ -106,7 +106,7 @@ Tickets Hunter 是一個開放原始碼的多平台搶票自動化系統，支�
 
 **執行檔版本**：下載 → 解壓縮 → 雙擊 `settings.exe` → 設定 → 搶票
 
-**Python 版本**：`pip install -r requirement.txt` → `python src/settings.py` → 設定 → 搶票
+**Python 版本**：安裝 [uv](https://docs.astral.sh/uv/) → `uv sync` → `uv run python src/settings.py` → 設定 → 搶票（不用 uv 也可 `pip install -r requirement.txt`）
 
 ---
 
@@ -158,13 +158,29 @@ tickets_hunter/
 │   └── 🔧 輔助工具
 │       └── assets/                 # 資源檔案
 │           └── sounds/             # 音效檔
+├── 🧪 tests/                    # 自動化測試
+│   ├── unit/                   # 單元測試 + settings.py HTTP API 測試（pytest）
+│   └── e2e/                    # 端對端測試（真實 settings.py + Playwright）
+├── 📈 benchmarks/               # 熱路徑效能基準
 └── 📋 專案資訊
     ├── README.md               # 專案說明文件
-    ├── CONTRIBUTING.md         # 貢獻指南
+    ├── CONTRIBUTING.md         # 貢獻指南（開發環境、測試、CI）
     ├── LEGAL_NOTICE.md         # 法律聲明
     ├── LICENSE                 # 授權條款
-    └── requirement.txt         # Python 相依套件
+    ├── pyproject.toml          # 專案設定與相依套件（uv / ruff / pytest）
+    ├── uv.lock                 # 鎖定的相依版本
+    └── requirement.txt         # 由 uv.lock 匯出的 pip 相容清單
 ```
+
+### 🛠️ 開發
+
+```bash
+uv sync            # 建立開發環境
+make check         # lint + 單元測試（PR 必須通過）
+make e2e           # 端對端測試（需先 make e2e-install）
+```
+
+每個 Pull Request 都會由 GitHub Actions 執行 lint、Ubuntu／Windows 單元測試、e2e 與 PyInstaller 打包檢查，詳見 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ---
 

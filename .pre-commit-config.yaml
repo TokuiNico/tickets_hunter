@@ -1,0 +1,38 @@
+# Install once:  uv run pre-commit install
+# Run manually:  uv run pre-commit run --all-files
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+        exclude: ^src/www/
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=2048"]
+      - id: end-of-file-fixer
+        files: \.(py|toml|yml|yaml|md)$
+      - id: trailing-whitespace
+        files: \.(py|toml|yml|yaml)$
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.7
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+      - id: ruff-format
+        files: ^(tests|benchmarks)/
+
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.8.17
+    hooks:
+      - id: uv-lock
+
+  - repo: local
+    hooks:
+      - id: no-emoji-in-python
+        name: no emoji in .py files
+        entry: python scripts/check_no_emoji.py
+        language: system
+        types: [python]

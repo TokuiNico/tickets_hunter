@@ -40,6 +40,18 @@
    ```
 
 ### 3. 安裝相依套件
+
+**方式 A：uv（推薦）** — 自動下載正確的 Python 3.11 並依 `uv.lock` 安裝鎖定版本
+
+```bash
+# 安裝 uv：https://docs.astral.sh/uv/getting-started/installation/
+uv sync --no-dev
+```
+
+之後所有 `python xxx.py` 指令改成 `uv run python xxx.py` 即可。
+
+**方式 B：pip**
+
 ```bash
 pip install -r requirement.txt
 ```

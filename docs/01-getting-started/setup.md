@@ -52,6 +52,16 @@ cd tickets_hunter
 ```
 
 #### 3. 安裝基本套件
+
+推薦使用 [uv](https://docs.astral.sh/uv/)：會依 `.python-version` 自動準備 Python 3.11，並依 `uv.lock` 安裝與 CI／發行版完全相同的版本。
+
+```bash
+uv sync            # 開發者（含 pytest / ruff / playwright）
+uv sync --no-dev   # 只需執行程式
+```
+
+沿用 pip 也可以（`requirement.txt` 由 `uv.lock` 匯出）：
+
 ```bash
 pip install -r requirement.txt
 ```

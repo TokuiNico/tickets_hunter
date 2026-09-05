@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- 開發環境改用 uv 管理：新增 `pyproject.toml`、`uv.lock`、`.python-version`；`requirement.txt` 改由 `uv.lock` 匯出
+- 新增單元測試（util 關鍵字／選位邏輯、settings 設定檔遷移、settings.py HTTP API）與 Playwright 端對端測試（真實 settings.py 設定頁）
+- 新增 GitHub Actions CI：每個 PR 執行 ruff、Ubuntu／Windows 單元測試、e2e、PyInstaller 打包檢查；發行流程改用 uv 安裝鎖定版本
+- 新增 ruff 設定、pre-commit、Dependabot、Makefile 與 `.py` emoji 檢查腳本
+- 新增 `TICKETS_HUNTER_APP_ROOT` 環境變數可指定設定檔／狀態檔目錄，`TICKETS_HUNTER_NO_BROWSER=1` 可讓 settings.py 啟動時不自動開瀏覽器
+- 修正 `.py` 中的無效跳脫序列（W605）與 `== True/False` 比較
+
 ## 2026.09.05
 
 - 改善主迴圈反應速度：每 50ms 的網址輪詢改為單次輕量呼叫，不再逐字元序列化網址

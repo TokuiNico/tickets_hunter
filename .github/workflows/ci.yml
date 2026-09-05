@@ -1,0 +1,153 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  UV_FROZEN: "1"          # never re-resolve in CI; uv.lock is the source of truth
+  PYTHONUTF8: "1"
+
+jobs:
+  lint:
+    name: Lint / lockfile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install dev tools
+        run: uv sync --only-group dev
+
+      - name: Ruff lint
+        run: uv run ruff check --output-format=github .
+
+      - name: Ruff format (tests, benchmarks)
+        run: uv run ruff format --check tests benchmarks
+
+      - name: No emoji in .py files
+        run: uv run python scripts/check_no_emoji.py
+
+      - name: uv.lock is up to date with pyproject.toml
+        run: uv lock --check
+
+      - name: requirement.txt matches uv.lock
+        run: |
+          uv export --no-dev --no-hashes --no-emit-project --no-annotate --no-header -o /tmp/requirement.txt
+          diff -u <(grep -v '^#' requirement.txt) /tmp/requirement.txt \
+            || { echo "::error::requirement.txt is stale. Run: make requirements"; exit 1; }
+
+  unit:
+    name: Unit tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install
+        run: uv sync
+
+      - name: Run unit tests
+        run: uv run pytest tests/unit --cov=src --cov-report=term-missing --cov-report=xml --junitxml=junit-unit.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-results-${{ matrix.os }}
+          path: |
+            junit-unit.xml
+            coverage.xml
+          retention-days: 14
+
+  e2e:
+    name: E2E (settings UI)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install
+        run: uv sync
+
+      - name: Install Playwright Chromium
+        run: uv run playwright install --with-deps chromium
+
+      - name: Run e2e tests
+        run: uv run pytest tests/e2e --junitxml=junit-e2e.xml --tracing=retain-on-failure --screenshot=only-on-failure --output=test-results
+
+      - name: Upload e2e artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: |
+            junit-e2e.xml
+            test-results/
+          retention-days: 14
+
+  build-check:
+    name: PyInstaller build (windows)
+    runs-on: windows-latest
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install runtime + build deps
+        run: uv sync --no-dev --group build
+
+      - name: Build executables
+        run: |
+          uv run pyinstaller build_scripts/nodriver_tixcraft.spec --clean --noconfirm
+          uv run pyinstaller build_scripts/settings.spec --clean --noconfirm
+
+      - name: Smoke-check executables exist
+        shell: pwsh
+        run: |
+          foreach ($exe in @("dist\nodriver_tixcraft\nodriver_tixcraft.exe", "dist\settings\settings.exe")) {
+            if (-not (Test-Path $exe)) { Write-Error "missing $exe"; exit 1 }
+            Write-Host "ok: $exe ($((Get-Item $exe).Length) bytes)"
+          }
+
+  ci-ok:
+    # Single required status check for branch protection.
+    name: CI passed
+    if: always()
+    needs: [lint, unit, e2e, build-check]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check job results
+        run: |
+          echo '${{ toJSON(needs) }}'
+          [ "${{ contains(join(needs.*.result, ','), 'failure') }}" = "false" ] && \
+          [ "${{ contains(join(needs.*.result, ','), 'cancelled') }}" = "false" ]
