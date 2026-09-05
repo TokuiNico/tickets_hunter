@@ -11,6 +11,7 @@ Each scenario reports median / p95 latency per call and the number of CDP
 messages sent per call (counted by wrapping tab.send). "old" is the frozen
 copy in benchmarks/baseline.py, "new" is the live code in src/.
 """
+
 import argparse
 import asyncio
 import http.server
@@ -38,6 +39,7 @@ from platforms import tixcraft  # noqa: E402
 # ----------------------------------------------------------------------------
 # infrastructure
 
+
 class _Quiet(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *args):
         pass
@@ -47,6 +49,7 @@ def serve_fixtures():
     fixtures = os.path.join(HERE, "fixtures")
     if not os.path.exists(os.path.join(fixtures, "area_page.html")):
         import subprocess
+
         subprocess.check_call([sys.executable, os.path.join(fixtures, "gen_fixture.py")])
     handler = lambda *a, **k: _Quiet(*a, directory=fixtures, **k)  # noqa: E731
     httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
@@ -113,9 +116,9 @@ _current_tab = None
 # ----------------------------------------------------------------------------
 # scenarios: each returns (old_fn, new_fn, description)
 
-SEL_ABSENT = '#onetrust-accept-btn-handler'
-SEL_AREA = '.zone a'
-SEL_TEXT = '#TicketForm_verifyCode'
+SEL_ABSENT = "#onetrust-accept-btn-handler"
+SEL_AREA = ".zone a"
+SEL_TEXT = "#TicketForm_verifyCode"
 
 
 def scenarios(tab, config_dict):
@@ -152,18 +155,26 @@ def scenarios(tab, config_dict):
         return await nc.nodriver_dom_click(tab, SEL_AREA, rows[3]["index"])
 
     return [
-        ("URL poll (every 50ms tick)",
-         lambda: baseline.baseline_current_url(tab),
-         lambda: nc.nodriver_current_url(tab, config_dict)),
-        ("Existence probe, selector absent",
-         lambda: baseline.baseline_exists(tab, SEL_ABSENT),
-         lambda: nc.nodriver_dom_exists(tab, SEL_ABSENT)),
-        ("Click first '.zone a'",
-         lambda: baseline.baseline_click(tab, SEL_AREA),
-         lambda: nc.nodriver_dom_click(tab, SEL_AREA)),
-        ("outerHTML of one element",
-         lambda: baseline.baseline_outer_html(tab, SEL_TEXT),
-         lambda: nc.nodriver_dom_outer_html(tab, SEL_TEXT)),
+        (
+            "URL poll (every 50ms tick)",
+            lambda: baseline.baseline_current_url(tab),
+            lambda: nc.nodriver_current_url(tab, config_dict),
+        ),
+        (
+            "Existence probe, selector absent",
+            lambda: baseline.baseline_exists(tab, SEL_ABSENT),
+            lambda: nc.nodriver_dom_exists(tab, SEL_ABSENT),
+        ),
+        (
+            "Click first '.zone a'",
+            lambda: baseline.baseline_click(tab, SEL_AREA),
+            lambda: nc.nodriver_dom_click(tab, SEL_AREA),
+        ),
+        (
+            "outerHTML of one element",
+            lambda: baseline.baseline_outer_html(tab, SEL_TEXT),
+            lambda: nc.nodriver_dom_outer_html(tab, SEL_TEXT),
+        ),
         ("Cloudflare detect (on URL change)", old_cf, new_cf),
         ("TixCraft area stage: scan + click", old_area, new_area),
         ("Full main-loop tick on tixcraft page", old_tick, new_tick),
@@ -172,8 +183,10 @@ def scenarios(tab, config_dict):
 
 def fmt_row(name, old, new):
     speedup = old[0] / new[0] if new[0] > 0 else float("inf")
-    return (f"| {name} | {old[0]:.2f} / {old[1]:.2f} | {old[2]:.1f} "
-            f"| {new[0]:.2f} / {new[1]:.2f} | {new[2]:.1f} | {speedup:.1f}x |")
+    return (
+        f"| {name} | {old[0]:.2f} / {old[1]:.2f} | {old[2]:.1f} "
+        f"| {new[0]:.2f} / {new[1]:.2f} | {new[2]:.1f} | {speedup:.1f}x |"
+    )
 
 
 async def main(args):
@@ -185,18 +198,21 @@ async def main(args):
 
     httpd, url = serve_fixtures()
     browser_args = nc.get_nodriver_browser_args() + [
-        "--disable-gpu", "--no-sandbox", "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
     ]
-    conf = Config(browser_args=browser_args, sandbox=False, headless=True,
-                  browser_executable_path=chrome)
+    conf = Config(browser_args=browser_args, sandbox=False, headless=True, browser_executable_path=chrome)
     browser = await uc.start(conf)
     try:
         tab = await browser.get(url)
         await tab.wait_for(".zone a", timeout=10)
         _current_tab = tab
 
-        config_dict = {"advanced": {"verbose": False, "tixcraft_soft_block_delay": ""},
-                       "homepage": "https://tixcraft.com/activity/detail/bench"}
+        config_dict = {
+            "advanced": {"verbose": False, "tixcraft_soft_block_delay": ""},
+            "homepage": "https://tixcraft.com/activity/detail/bench",
+        }
         node_count = await tab.evaluate("document.getElementsByTagName('*').length")
         print(f"fixture: {url}  DOM nodes: {node_count}  iterations: {args.iterations}\n")
         print("| Scenario | old median / p95 (ms) | old CDP msgs | new median / p95 (ms) | new CDP msgs | speedup |")

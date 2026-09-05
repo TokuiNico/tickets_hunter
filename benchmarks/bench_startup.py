@@ -10,6 +10,7 @@ src/assets/model/universal:
 
     python benchmarks/bench_startup.py [--rounds 3] [--chrome PATH]
 """
+
 import argparse
 import asyncio
 import os
@@ -48,7 +49,7 @@ async def run_sequential(chrome, url, config_dict):
     browser = await uc.start(make_conf(chrome))
     tab = await browser.get(url)
     await tab.wait_for(".zone a", timeout=10)
-    ocr = nc.create_ocr_instance(config_dict)          # old: after browser, blocking
+    ocr = nc.create_ocr_instance(config_dict)  # old: after browser, blocking
     assert ocr is not None
     ready = time.perf_counter() - t0
     await stop_quietly(browser)
@@ -61,7 +62,7 @@ async def run_overlapped(chrome, url, config_dict):
     browser = await uc.start(make_conf(chrome))
     tab = await browser.get(url)
     await tab.wait_for(".zone a", timeout=10)
-    ocr = await ocr_task                               # new: already loaded
+    ocr = await ocr_task  # new: already loaded
     assert ocr is not None
     ready = time.perf_counter() - t0
     await stop_quietly(browser)
@@ -76,8 +77,7 @@ async def main(args):
     httpd, url = serve_fixtures()
     config_dict = {
         "homepage": "https://tixcraft.com/activity/detail/bench",
-        "ocr_captcha": {"enable": True, "beta": True, "use_universal": True,
-                        "path": "assets/model/universal"},
+        "ocr_captcha": {"enable": True, "beta": True, "use_universal": True, "path": "assets/model/universal"},
         "advanced": {"verbose": False},
     }
     seq, ovl = [], []
