@@ -7,6 +7,7 @@ import socket
 import subprocess
 import sys
 import threading
+from functools import lru_cache
 from typing import Optional
 
 import requests
@@ -58,7 +59,10 @@ def find_between( s, first, last ):
         pass
     return ret
 
+@lru_cache(maxsize=1)
 def get_app_root():
+    # Cached: neither sys.frozen nor __file__ changes during a run, and this
+    # is called several times per 50ms main-loop tick via the state-file paths.
     app_root = ""
     if hasattr(sys, 'frozen'):
         # Frozen executable (PyInstaller)
@@ -84,19 +88,25 @@ def set_instance_id(instance_id):
     global _instance_id
     if instance_id and re.match(r'^[A-Za-z0-9_-]{1,32}$', instance_id):
         _instance_id = instance_id
+        _get_instance_dir.cache_clear()
         return True
     return False
 
 def get_instance_id():
     return _instance_id
 
-def get_instance_state_path(filename):
-    app_root = get_app_root()
-    if _instance_id == CONST_DEFAULT_INSTANCE_ID:
-        return os.path.join(app_root, filename)
-    instance_dir = os.path.join(app_root, "instances", _instance_id)
+@lru_cache(maxsize=None)
+def _get_instance_dir(instance_id):
+    # Create the per-instance directory once per id rather than issuing an
+    # os.makedirs() (stat + possible mkdir) on every state-file lookup.
+    instance_dir = os.path.join(get_app_root(), "instances", instance_id)
     os.makedirs(instance_dir, exist_ok=True)
-    return os.path.join(instance_dir, filename)
+    return instance_dir
+
+def get_instance_state_path(filename):
+    if _instance_id == CONST_DEFAULT_INSTANCE_ID:
+        return os.path.join(get_app_root(), filename)
+    return os.path.join(_get_instance_dir(_instance_id), filename)
 
 
 def format_keyword_for_display(keyword_string):
@@ -161,6 +171,37 @@ def format_config_keyword_for_json(user_input):
 
     return user_input
 
+@lru_cache(maxsize=256)
+def _parse_keyword_json(keyword_string):
+    """json.loads('[' + keyword_string + ']') memoized as a tuple.
+
+    Keyword strings come from settings.json and change only on hot-reload,
+    yet the matchers below re-parse them for every row on every tick.
+    Returns () when the string is not valid JSON list content.
+    """
+    try:
+        return tuple(json.loads("[" + keyword_string + "]"))
+    except Exception:
+        return ()
+
+
+@lru_cache(maxsize=256)
+def _compile_text_match_keywords(keyword_string):
+    """Normalise a keyword string for is_text_match_keyword and parse it once."""
+    # Handle semicolon-separated format (Issue #23)
+    if CONST_KEYWORD_DELIMITER in keyword_string and not '"' in keyword_string:
+        # Convert "3,280;2,680" to "3,280","2,680"
+        items = keyword_string.split(CONST_KEYWORD_DELIMITER)
+        keyword_string = ','.join([f'"{item.strip()}"' for item in items if item.strip()])
+
+    # directly input text into arrray field.
+    if len(keyword_string) > 0:
+        if not '"' in keyword_string:
+            keyword_string = '"' + keyword_string + '"'
+
+    return _parse_keyword_json(keyword_string)
+
+
 def is_text_match_keyword(keyword_string, text, config_dict=None):
     """
     Check if text matches any keyword in keyword_string.
@@ -181,24 +222,8 @@ def is_text_match_keyword(keyword_string, text, config_dict=None):
     """
     is_match_keyword = True
     if len(keyword_string) > 0 and len(text) > 0:
-
-        # Handle semicolon-separated format (Issue #23)
-        if CONST_KEYWORD_DELIMITER in keyword_string and not '"' in keyword_string:
-            # Convert "3,280;2,680" to "3,280","2,680"
-            items = keyword_string.split(CONST_KEYWORD_DELIMITER)
-            keyword_string = ','.join([f'"{item.strip()}"' for item in items if item.strip()])
-
-        # directly input text into arrray field.
-        if len(keyword_string) > 0:
-            if not '"' in keyword_string:
-                keyword_string = '"' + keyword_string + '"'
-
         is_match_keyword = False
-        keyword_array = []
-        try:
-            keyword_array = json.loads("["+ keyword_string +"]")
-        except Exception as exc:
-            keyword_array = []
+        keyword_array = _compile_text_match_keywords(keyword_string)
         for item_list in keyword_array:
             if len(item_list) > 0:
                 if ' ' in item_list:
@@ -1234,10 +1259,8 @@ def parse_keyword_string_to_array(keyword_string):
     """
     if not keyword_string or not keyword_string.strip():
         return []
-    try:
-        return json.loads("[" + keyword_string + "]")
-    except:
-        return []
+    # Fresh list each call (callers may mutate); the parse itself is memoized.
+    return list(_parse_keyword_json(keyword_string))
 
 
 def get_matched_blocks_by_keyword(config_dict, auto_select_mode, keyword_string, formated_area_list):
@@ -1258,11 +1281,7 @@ def is_row_match_keyword(keyword_string, row_text):
     is_match_keyword = True
     if len(keyword_string) > 0 and len(row_text) > 0:
         is_match_keyword = False
-        keyword_array = []
-        try:
-            keyword_array = json.loads("["+ keyword_string +"]")
-        except Exception as exc:
-            keyword_array = []
+        keyword_array = _parse_keyword_json(keyword_string)
         for item_list in keyword_array:
             if len(item_list) > 0:
                 if ' ' in item_list:

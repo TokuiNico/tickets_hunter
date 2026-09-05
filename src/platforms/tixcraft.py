@@ -23,6 +23,9 @@ from nodriver_common import (
     nodriver_check_checkbox,
     nodriver_check_checkbox_enhanced,
     nodriver_current_url,
+    nodriver_dom_click,
+    nodriver_dom_exists,
+    nodriver_wait_for_selector,
     nodriver_get_text_by_selector,
     play_sound_while_ordering,
     send_discord_notification,
@@ -49,6 +52,7 @@ __all__ = [
     "nodriver_tixcraft_date_auto_select",
     "nodriver_tixcraft_area_auto_select",
     "nodriver_get_tixcraft_target_area",
+    "nodriver_tixcraft_scan_area_rows",
     "nodriver_ticket_number_select_fill",
     "nodriver_tixcraft_assign_ticket_number",
     "nodriver_tixcraft_ticket_main_agree",
@@ -194,10 +198,10 @@ def _process_queue_it_state(url, state, current_time):
 async def nodriver_tixcraft_home_close_window(tab):
     if _state.get('cookie_accepted'):
         return
+    # Runs on every main-loop tick until the banner is seen once, so it must
+    # stay a single CDP call (no DOM.getDocument): find + click in one evaluate.
     try:
-        accept_all_cookies_btn = await tab.query_selector('#onetrust-accept-btn-handler')
-        if accept_all_cookies_btn:
-            await accept_all_cookies_btn.click()
+        if await nodriver_dom_click(tab, '#onetrust-accept-btn-handler'):
             _state['cookie_accepted'] = True
     except:
         pass
@@ -233,7 +237,7 @@ async def nodriver_tixcraft_redirect(tab, url):
                 await tab.get(entry_url)
                 # 等待日期列表出現，確保頁面載入完成
                 try:
-                    await tab.wait_for('#gameList > table > tbody > tr', timeout=5)
+                    await nodriver_wait_for_selector(tab, '#gameList > table > tbody > tr', timeout=5)
                 except:
                     pass  # timeout 沒關係，讓後續邏輯處理
                 ret = True
@@ -582,7 +586,8 @@ async def nodriver_ticketmaster_get_ticketPriceList(tab, config_dict):
 
     try:
         # Phase 1: Wait for mapContainer (basic page load)
-        await tab.wait_for(selector='#mapContainer', timeout=5)
+        if not await nodriver_wait_for_selector(tab, '#mapContainer', timeout=5):
+            raise asyncio.TimeoutError("mapContainer not found")
 
         # Ensure DOM references are synchronized (official recommendation)
         await tab
@@ -592,7 +597,7 @@ async def nodriver_ticketmaster_get_ticketPriceList(tab, config_dict):
         # Phase 2: Wait for loading to finish (check if loadingmap disappears)
         max_wait = 10  # 10 seconds max
         for i in range(max_wait):
-            loading = await tab.query_selector('#loadingmap')
+            loading = await nodriver_dom_exists(tab, '#loadingmap')
             if not loading:
                 if i > 0:
                     debug.log(f"[TICKETMASTER TICKET] Loading finished after {i}s")
@@ -1627,7 +1632,7 @@ async def nodriver_tixcraft_date_auto_select(tab, url, config_dict, domain_name)
         # 注意：從 /activity/detail/ redirect 過來時，redirect 函數已經等待過了
         # 這裡再等待一次是為了處理直接進入 /activity/game/ 頁面的情況
         try:
-            await tab.wait_for('#gameList > table > tbody > tr', timeout=3)
+            await nodriver_wait_for_selector(tab, '#gameList > table > tbody > tr', timeout=3)
         except:
             pass  # timeout 沒關係，繼續嘗試讀取
 
@@ -1919,32 +1924,15 @@ async def nodriver_tixcraft_area_auto_select(tab, url, config_dict):
     auto_select_mode = config_dict["area_auto_select"]["mode"]
     area_auto_fallback = config_dict.get('area_auto_fallback', False)  # T021: Safe access for new field
 
-    try:
-        el = await tab.query_selector('.zone')
-    except:
+    # One CDP round-trip fetches every area row (index, text, seat counter).
+    # Previously this stage did query_selector('.zone') + query_selector_all('a')
+    # (two full DOM.getDocument dumps) before the batch evaluate, and then
+    # clicked through Element.click() (resolveNode + getContentQuads + flash
+    # injection + click). Rows are plain dicts now; the click is JS by index.
+    el = await nodriver_tixcraft_scan_area_rows(tab)
+    if el is None:
         return
-
-    if not el:
-        return
-
-    # Batch pre-fetch: one JS call to get all area text and font data
-    area_list_cache = None
-    area_text_cache = None
-    try:
-        area_list_cache = await el.query_selector_all('a')
-        area_text_cache = await tab.evaluate("""
-            Array.from(document.querySelectorAll('.zone a')).map(a => ({
-                text: a.innerText.trim(),
-                fontText: a.querySelector('font')?.textContent?.trim() ?? ''
-            }))
-        """)
-        if area_list_cache and area_text_cache and len(area_list_cache) != len(area_text_cache):
-            area_text_cache = None
-        if area_text_cache:
-            debug.log(f"[AREA KEYWORD] Batch pre-fetch: {len(area_text_cache)} areas cached")
-    except:
-        area_list_cache = None
-        area_text_cache = None
+    debug.log(f"[AREA KEYWORD] Batch pre-fetch: {len(el)} areas cached")
 
     is_need_refresh = False
     matched_blocks = None
@@ -1966,8 +1954,7 @@ async def nodriver_tixcraft_area_auto_select(tab, url, config_dict):
             debug.log(f"[AREA KEYWORD] Checking keyword #{keyword_index + 1}: {area_keyword_item}")
 
             is_need_refresh, matched_blocks = await nodriver_get_tixcraft_target_area(
-                el, config_dict, area_keyword_item,
-                area_list_cache=area_list_cache, area_text_cache=area_text_cache)
+                el, config_dict, area_keyword_item)
 
             if not is_need_refresh:
                 # T013: Keyword matched log
@@ -1987,8 +1974,7 @@ async def nodriver_tixcraft_area_auto_select(tab, url, config_dict):
                 debug.log(f"[AREA FALLBACK] area_auto_fallback=true, triggering auto fallback")
                 debug.log(f"[AREA FALLBACK] Selecting available area based on area_select_order='{auto_select_mode}'")
                 is_need_refresh, matched_blocks = await nodriver_get_tixcraft_target_area(
-                    el, config_dict, "",
-                    area_list_cache=area_list_cache, area_text_cache=area_text_cache)
+                    el, config_dict, "")
                 is_fallback_selection = True  # Mark as fallback selection
             else:
                 # T023: Fallback disabled - strict mode (no selection, but still reload)
@@ -1999,8 +1985,7 @@ async def nodriver_tixcraft_area_auto_select(tab, url, config_dict):
                 # is_need_refresh remains True (will trigger reload)
     else:
         is_need_refresh, matched_blocks = await nodriver_get_tixcraft_target_area(
-            el, config_dict, "",
-            area_list_cache=area_list_cache, area_text_cache=area_text_cache)
+            el, config_dict, "")
         # No keyword specified, treat as mode-based selection (similar to fallback)
         if not area_keyword:
             is_fallback_selection = True
@@ -2017,23 +2002,16 @@ async def nodriver_tixcraft_area_auto_select(tab, url, config_dict):
     if target_area:
         # T013: Log selected area with selection type
         if debug.enabled:
-            try:
-                area_text = await target_area.text
-                if not area_text:
-                    area_text = await target_area.inner_text
-                area_text = area_text.strip()[:80] if area_text else "Unknown"
-                selection_type = "fallback" if is_fallback_selection else "keyword match"
-                debug.log(f"[AREA SELECT] Selected area: {area_text} ({selection_type})")
-            except:
-                pass  # If text extraction fails, skip logging
+            area_text = (target_area.get('text') or "Unknown").strip()[:80]
+            selection_type = "fallback" if is_fallback_selection else "keyword match"
+            debug.log(f"[AREA SELECT] Selected area: {area_text} ({selection_type})")
 
-        try:
-            await target_area.click()
-        except:
-            try:
-                await target_area.evaluate('el => el.click()')
-            except:
-                pass
+        # JS click by index: one CDP call, same element.click() the browser
+        # would dispatch. If the row list changed under us the click reports
+        # False and the next 50ms tick simply rescans.
+        clicked = await nodriver_dom_click(tab, CONST_TIXCRAFT_AREA_ROW_SELECTOR, target_area['index'])
+        if not clicked:
+            debug.log("[AREA SELECT] Row vanished before click, will rescan next tick")
 
     # Auto refresh if needed (simple wait mode, consistent with TicketPlus/iBon/FamiTicket)
     if is_need_refresh:
@@ -2048,8 +2026,46 @@ async def nodriver_tixcraft_area_auto_select(tab, url, config_dict):
         except Exception:
             pass
 
-async def nodriver_get_tixcraft_target_area(el, config_dict, area_keyword_item,
-                                            area_list_cache=None, area_text_cache=None):
+CONST_TIXCRAFT_AREA_ROW_SELECTOR = '.zone a'
+
+# Returns null when no .zone container exists (caller treats as "not the
+# area page yet"), else one {index, text, fontText} per row, in DOM order.
+CONST_TIXCRAFT_AREA_SCAN_JS = """
+(function() {
+    if (!document.querySelector('.zone')) return null;
+    return Array.from(document.querySelectorAll('.zone a')).map((a, i) => ({
+        index: i,
+        text: (a.innerText || '').trim(),
+        fontText: (a.querySelector('font')?.textContent ?? '').trim()
+    }));
+})()
+"""
+
+
+async def nodriver_tixcraft_scan_area_rows(tab):
+    """Fetch every '.zone a' row as {index, text, fontText} in one CDP call.
+
+    Returns None when the .zone container is absent, [] when it has no rows.
+    """
+    try:
+        rows = await tab.evaluate(CONST_TIXCRAFT_AREA_SCAN_JS)
+    except Exception:
+        return None
+    if rows is None:
+        return None
+    rows = util.parse_nodriver_result(rows)
+    if not isinstance(rows, list):
+        return None
+    return [r for r in rows if isinstance(r, dict) and 'index' in r]
+
+
+async def nodriver_get_tixcraft_target_area(el, config_dict, area_keyword_item):
+    """Filter scanned area rows by keyword / exclusion / seat count.
+
+    `el` is the row list from nodriver_tixcraft_scan_area_rows(). Returns
+    (is_need_refresh, matched_rows) where matched_rows is a list of row dicts
+    (None when nothing matched).
+    """
     area_auto_select_mode = config_dict["area_auto_select"]["mode"]
     debug = util.create_debug_logger(config_dict)
     is_need_refresh = False
@@ -2068,18 +2084,11 @@ async def nodriver_get_tixcraft_target_area(el, config_dict, area_keyword_item,
             debug.log(f"[AREA KEYWORD] No keyword specified, matching all areas")
             debug.log(f"[AREA KEYWORD] Auto-select mode: {area_auto_select_mode}")
 
-    if not el:
+    if el is None:
         debug.log(f"[AREA KEYWORD] Element is None, cannot select area")
         return True, None
 
-    if area_list_cache is not None:
-        area_list = area_list_cache
-    else:
-        try:
-            area_list = await el.query_selector_all('a')
-        except:
-            debug.log(f"[AREA KEYWORD] Failed to query area list")
-            return True, None
+    area_list = el
 
     if not area_list or len(area_list) == 0:
         debug.log(f"[AREA KEYWORD] No areas found")
@@ -2093,15 +2102,7 @@ async def nodriver_get_tixcraft_target_area(el, config_dict, area_keyword_item,
     for row in area_list:
         area_index += 1
 
-        if area_text_cache is not None:
-            row_text = area_text_cache[area_index - 1].get('text', '')
-        else:
-            try:
-                row_html = await row.get_html()
-                row_text = util.remove_html_tags(row_html)
-            except:
-                debug.log(f"[AREA KEYWORD] [{area_index}] Failed to get row content")
-                break
+        row_text = row.get('text', '')
 
         if not row_text or util.reset_row_text_if_match_keyword_exclude(config_dict, row_text):
             debug.log(f"[AREA KEYWORD] [{area_index}] Excluded by keyword_exclude")
@@ -2145,13 +2146,7 @@ async def nodriver_get_tixcraft_target_area(el, config_dict, area_keyword_item,
         allow_less_tickets = config_dict.get("tixcraft", {}).get("allow_less_tickets", False)
         if config_dict["ticket_number"] > 1 and not allow_less_tickets:
             try:
-                if area_text_cache is not None:
-                    font_text = area_text_cache[area_index - 1].get('fontText', '')
-                else:
-                    font_text = ''
-                    font_el = await row.query_selector('font')
-                    if font_el:
-                        font_text = await font_el.evaluate('el => el.textContent') or ''
+                font_text = row.get('fontText', '')
                 if font_text:
                     font_text = "@%s@" % font_text
 
@@ -2277,7 +2272,7 @@ async def nodriver_tixcraft_assign_ticket_number(tab, config_dict):
 
     # 等待票券選擇器出現（智慧等待，取代固定 0.5 秒延遲）
     try:
-        await tab.wait_for('.mobile-select, select[id*="TicketForm_ticketPrice_"]', timeout=2)
+        await nodriver_wait_for_selector(tab, '.mobile-select, select[id*="TicketForm_ticketPrice_"]', timeout=2)
     except:
         pass  # Continue even if timeout, will try to find selectors below
 

@@ -20,6 +20,7 @@ import util
 from nodriver_common import (
     check_and_handle_pause,
     nodriver_check_checkbox,
+    nodriver_dom_exists,
     play_sound_while_ordering,
     send_discord_notification,
     send_telegram_notification,
@@ -1958,16 +1959,13 @@ async def nodriver_kktix_reg_new_main(tab, config_dict, fail_list, played_sound_
     area_auto_fallback = config_dict.get('area_auto_fallback', False)  # T021: Safe access for new field (default: strict mode)
 
     # part 1: check div.
-    registrationsNewApp_div = None
-    try:
-        registrationsNewApp_div = await tab.query_selector('#registrationsNewApp')
-    except Exception as exc:
-        pass
-        #print("find input fail:", exc)
+    # Existence probe only (runs every tick on /registrations/new): one CDP
+    # call instead of query_selector's full DOM.getDocument dump.
+    is_registrations_app_present = await nodriver_dom_exists(tab, '#registrationsNewApp')
 
     # part 2: assign ticket number
     is_ticket_number_assigned = False
-    if not registrationsNewApp_div is None:
+    if is_registrations_app_present:
         is_dom_ready = True
 
         # 檢查頁面狀態，如果偵測到售罄或未開賣，設定重新載入標記

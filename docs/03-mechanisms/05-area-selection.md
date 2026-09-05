@@ -72,28 +72,26 @@
 **範例來源**：TixCraft (`src/platforms/tixcraft.py:nodriver_tixcraft_area_auto_select`)
 
 ```python
-# 先批次取得所有區域文字與票數資訊，後續配對使用 cache。
-area_list_cache = await el.query_selector_all('a')
-area_text_cache = await tab.evaluate("""
-    Array.from(document.querySelectorAll('.zone a')).map(a => ({
-        text: a.innerText.trim(),
-        fontText: a.querySelector('font')?.textContent?.trim() ?? ''
-    }))
-""")
+# 一次 CDP 往返取得所有區域列：[{index, text, fontText}, ...]
+# （.zone 不存在時回傳 None，代表尚未進入區域頁）
+rows = await nodriver_tixcraft_scan_area_rows(tab)
+if rows is None:
+    return
 
 is_need_refresh, matched_blocks = await nodriver_get_tixcraft_target_area(
-    el,
-    config_dict,
-    area_keyword_item,
-    area_list_cache=area_list_cache,
-    area_text_cache=area_text_cache,
-)
+    rows, config_dict, area_keyword_item)
+
+target_area = util.get_target_item_from_matched_list(matched_blocks, auto_select_mode)
+if target_area:
+    # 以索引透過 JS 點擊：一次往返，等同瀏覽器的 element.click()
+    await nodriver_dom_click(tab, '.zone a', target_area['index'])
 ```
 
 **設計原則**：
 - 對 DOM/CDP 的往返次數應與頁面掃描次數解耦，避免「掃一列、查一次 DOM、配一次」。
-- 候選資料應包含文字、可用狀態、票數提示與後續操作需要的索引或元素。
+- 候選資料應包含文字、可用狀態、票數提示與後續操作需要的索引；不要持有 zendriver `Element` 物件（取得它需要整棵 DOM 的 `DOM.getDocument`，點擊它又需要 3 次額外往返）。
 - 配對、排除關鍵字、票數檢查應在 Python 端使用批次結果完成。
+- 點擊改用 `nodriver_dom_click(tab, selector, index)`；若掃描與點擊之間列表變動，回傳 False，下一個 tick 重新掃描即可。
 - KKTIX 價格列表模式同樣適用：一次擷取所有票種列，再回傳要填票數的 input index。
 
 ---

@@ -36,7 +36,22 @@ while True:
 
 ### URL 取得機制
 
-`nodriver_current_url()`（`src/nodriver_common.py`）透過 `tab.js_dumps('window.location.href')` 取得當前頁面 URL。若瀏覽器連線中斷（WebSocket 500、WinError 1225 等），設定 `is_quit_bot = True` 終止程式。
+`nodriver_current_url()`（`src/nodriver_common.py`）透過單一 `Runtime.evaluate("String(window.location.href)")`（returnByValue）取得當前頁面 URL，一次 CDP 往返只回傳網址字串。若瀏覽器連線中斷（WebSocket 500、WinError 1225 等），設定 `is_quit_bot = True` 終止程式。
+
+> 效能備註：舊版使用 `tab.js_dumps('window.location.href')`，會把字串逐字元展開、連同 `String.prototype` 全部成員一起序列化回傳（約 120 個巢狀 dict），再於 Python 端重組網址；此呼叫每 50ms 執行一次。詳見 `benchmarks/README.md`。
+
+### DOM 快速路徑
+
+每 tick 都會執行的 DOM 探測（元素是否存在、點擊、取 outerHTML）應使用 `src/nodriver_common.py` 的單次往返工具，而非 `tab.query_selector()`：
+
+| 工具 | 用途 | CDP 往返 |
+|------|------|---------|
+| `nodriver_dom_exists(tab, selector)` | 元素是否存在 | 1 |
+| `nodriver_dom_click(tab, selector, index=0)` | 對第 index 個符合元素執行 `element.click()` | 1 |
+| `nodriver_dom_outer_html(tab, selector)` | 取第一個符合元素的 outerHTML | 1 |
+| `nodriver_wait_for_selector(tab, selector, timeout)` | 以 50ms 間隔等待元素出現 | 每次探測 1 |
+
+`tab.query_selector()` 每次都會先執行 `DOM.getDocument(depth=-1, pierce=True)` 把整棵 DOM 樹傳回 Python，`Element.click()` 再多花 `resolveNode`、`getContentQuads` 與 flash 動畫注入三次往返；在數千節點的購票頁上，一次探測約需 40–50ms，等於把主迴圈週期從 50ms 拉長到 100ms。
 
 ### 迴圈前置處理
 
@@ -177,7 +192,7 @@ while True:
 
 ### 無法偵測 URL 變化
 **症狀**：主迴圈卡在同一個 URL
-**原因**：`js_dumps` 在 alert 開啟時會被阻塞
+**原因**：`Runtime.evaluate` 在 alert 開啟時會被阻塞（5 秒 timeout 後改讀 `tab.target.url`）
 **解法**：確認 alert handler 已正確註冊；檢查 `nodriver_current_url()` 的錯誤訊息
 
 ### Cloudflare 無限重試
