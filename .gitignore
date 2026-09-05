@@ -3,11 +3,22 @@
 /.idea
 .venv/
 
-# Python cache
+# Python cache / tooling
 __pycache__/
 *.pyc
 *.pyo
-.python-version
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+junit-*.xml
+test-results/
+
+# Build output (PyInstaller)
+/build/
+/dist/
 
 # Sensitive config files
 /src/settings.json
