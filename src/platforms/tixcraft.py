@@ -1334,7 +1334,7 @@ async def nodriver_ticketmaster_captcha(tab, config_dict, ocr):
                             if dismiss_result is True:
                                 dismiss_success = True
                             elif isinstance(dismiss_result, list) and len(dismiss_result) > 0:
-                                dismiss_success = dismiss_result[0] is True or dismiss_result[0] == True
+                                dismiss_success = dismiss_result[0] is True or dismiss_result[0] == 1
 
                             if debug.enabled:
                                 if dismiss_success:

@@ -7,6 +7,7 @@ matchers call on every tick.
 
     python benchmarks/bench_pure.py
 """
+
 import json
 import os
 import sys
@@ -17,15 +18,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), "src"))
 
 import util  # noqa: E402
 
-EXCLUDE = "\"輪椅\",\"身障\",\"身心\",\"障礙\",\"愛心\",\"Restricted View\",\"燈柱遮蔽\",\"視線不完整\""
+EXCLUDE = '"輪椅","身障","身心","障礙","愛心","Restricted View","燈柱遮蔽","視線不完整"'
 ROW = "2F 區域 B 3,280 熱賣中 視線良好"
 CONFIG = {"keyword_exclude": EXCLUDE}
 
 
 # --- old implementations -----------------------------------------------------
 
+
 def old_get_app_root():
-    if hasattr(sys, 'frozen'):
+    if hasattr(sys, "frozen"):
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(util.__file__))
 
@@ -57,9 +59,9 @@ def old_is_row_match_keyword(keyword_string, row_text):
             keyword_array = []
         for item_list in keyword_array:
             if len(item_list) > 0:
-                if ' ' in item_list:
+                if " " in item_list:
                     ok = True
-                    for each in item_list.split(' '):
+                    for each in item_list.split(" "):
                         if util.format_keyword_string(each) not in row_text:
                             ok = False
                     if ok:
@@ -77,9 +79,9 @@ def old_is_row_match_keyword(keyword_string, row_text):
 def old_is_text_match_keyword(keyword_string, text):
     is_match_keyword = True
     if len(keyword_string) > 0 and len(text) > 0:
-        if ';' in keyword_string and '"' not in keyword_string:
-            items = keyword_string.split(';')
-            keyword_string = ','.join([f'"{i.strip()}"' for i in items if i.strip()])
+        if ";" in keyword_string and '"' not in keyword_string:
+            items = keyword_string.split(";")
+            keyword_string = ",".join([f'"{i.strip()}"' for i in items if i.strip()])
         if len(keyword_string) > 0 and '"' not in keyword_string:
             keyword_string = '"' + keyword_string + '"'
         is_match_keyword = False
@@ -89,8 +91,8 @@ def old_is_text_match_keyword(keyword_string, text):
             keyword_array = []
         for item_list in keyword_array:
             if len(item_list) > 0:
-                if ' ' in item_list:
-                    if all(e in text for e in item_list.split(' ')):
+                if " " in item_list:
+                    if all(e in text for e in item_list.split(" ")):
                         is_match_keyword = True
                 elif item_list in text:
                     is_match_keyword = True
@@ -102,6 +104,7 @@ def old_is_text_match_keyword(keyword_string, text):
 
 
 # --- runner ------------------------------------------------------------------
+
 
 def bench(name, old_fn, new_fn, number=20000):
     assert old_fn() == new_fn(), (name, old_fn(), new_fn())
@@ -115,18 +118,26 @@ def main():
     print("| Helper (called per row / per tick) | old us/call | new us/call | speedup |")
     print("|---|---|---|---|")
     bench("get_app_root()", old_get_app_root, util.get_app_root)
-    bench("get_instance_state_path() (named instance)",
-          lambda: old_get_instance_state_path("MAXBOT_INT28_IDLE.txt"),
-          lambda: util.get_instance_state_path("MAXBOT_INT28_IDLE.txt"))
-    bench("parse_keyword_string_to_array(area keywords)",
-          lambda: old_parse_keyword_string_to_array('"VIP","1F 3280","搖滾區"'),
-          lambda: util.parse_keyword_string_to_array('"VIP","1F 3280","搖滾區"'))
-    bench("reset_row_text_if_match_keyword_exclude (default exclude list)",
-          lambda: old_is_row_match_keyword(EXCLUDE, ROW),
-          lambda: util.reset_row_text_if_match_keyword_exclude(CONFIG, ROW))
-    bench("is_text_match_keyword('3,280;2,680', row)",
-          lambda: old_is_text_match_keyword("3,280;2,680", ROW),
-          lambda: util.is_text_match_keyword("3,280;2,680", ROW))
+    bench(
+        "get_instance_state_path() (named instance)",
+        lambda: old_get_instance_state_path("MAXBOT_INT28_IDLE.txt"),
+        lambda: util.get_instance_state_path("MAXBOT_INT28_IDLE.txt"),
+    )
+    bench(
+        "parse_keyword_string_to_array(area keywords)",
+        lambda: old_parse_keyword_string_to_array('"VIP","1F 3280","搖滾區"'),
+        lambda: util.parse_keyword_string_to_array('"VIP","1F 3280","搖滾區"'),
+    )
+    bench(
+        "reset_row_text_if_match_keyword_exclude (default exclude list)",
+        lambda: old_is_row_match_keyword(EXCLUDE, ROW),
+        lambda: util.reset_row_text_if_match_keyword_exclude(CONFIG, ROW),
+    )
+    bench(
+        "is_text_match_keyword('3,280;2,680', row)",
+        lambda: old_is_text_match_keyword("3,280;2,680", ROW),
+        lambda: util.is_text_match_keyword("3,280;2,680", ROW),
+    )
     # clean up the instance dir the benchmark created
     inst = os.path.join(util.get_app_root(), "instances", "bench01")
     try:

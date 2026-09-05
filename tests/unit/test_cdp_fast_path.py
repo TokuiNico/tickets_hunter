@@ -6,8 +6,10 @@ JS clicks by index, outerHTML fetch, the URL poll, the fast wait, the
 TixCraft area scan, and Cloudflare detection on both a clean page and a
 page carrying interstitial markers.
 """
+
 import asyncio
 import http.server
+import logging
 import os
 import shutil
 import sys
@@ -15,19 +17,22 @@ import threading
 
 import pytest
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "src"))
+import nodriver_common as nc
+from platforms import tixcraft
 
-import nodriver_common as nc  # noqa: E402
-from platforms import tixcraft  # noqa: E402
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 FIXTURES = os.path.join(ROOT, "benchmarks", "fixtures")
 
 
 def _find_chrome():
-    for cand in ("/opt/pw-browsers/chromium-1194/chrome-linux/chrome",
-                 shutil.which("google-chrome"), shutil.which("chromium"),
-                 shutil.which("chromium-browser")):
+    for cand in (
+        os.environ.get("TICKETS_HUNTER_E2E_CHROMIUM"),
+        "/opt/pw-browsers/chromium-1194/chrome-linux/chrome",
+        shutil.which("google-chrome"),
+        shutil.which("chromium"),
+        shutil.which("chromium-browser"),
+    ):
         if cand and os.path.exists(cand):
             return cand
     return None
@@ -46,11 +51,14 @@ class _Quiet(http.server.SimpleHTTPRequestHandler):
 def server():
     if not os.path.exists(os.path.join(FIXTURES, "area_page.html")):
         import subprocess
+
         subprocess.check_call([sys.executable, os.path.join(FIXTURES, "gen_fixture.py")])
     cf_page = os.path.join(FIXTURES, "cf_page.html")
     with open(cf_page, "w", encoding="utf-8") as fh:
-        fh.write("<html><body><div id='cf-challenge-running'>Checking your browser before "
-                 "accessing the site.</div></body></html>")
+        fh.write(
+            "<html><body><div id='cf-challenge-running'>Checking your browser before "
+            "accessing the site.</div></body></html>"
+        )
     handler = lambda *a, **k: _Quiet(*a, directory=FIXTURES, **k)  # noqa: E731
     httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
@@ -64,9 +72,22 @@ def browser():
     import zendriver as uc
     from zendriver.core.config import Config
 
+    # zendriver logs the browser's stderr at INFO when the CDP handshake fails;
+    # keep it so a CI failure shows the real cause instead of the generic hint.
+    logging.getLogger("zendriver").setLevel(logging.INFO)
+
     async def start():
         args = nc.get_nodriver_browser_args() + ["--disable-gpu", "--no-sandbox", "--disable-dev-shm-usage"]
-        conf = Config(browser_args=args, sandbox=False, headless=True, browser_executable_path=CHROME)
+        conf = Config(
+            browser_args=args,
+            sandbox=False,
+            headless=True,
+            browser_executable_path=CHROME,
+            # A cold Chrome start on a CI runner can take several seconds; the
+            # zendriver default (0.25s x 10 tries) gives up too early.
+            browser_connection_timeout=1.0,
+            browser_connection_max_tries=30,
+        )
         return await uc.start(conf)
 
     loop = asyncio.new_event_loop()
@@ -145,9 +166,13 @@ def test_dom_outer_html_and_text_helper(tab):
 def test_modal_dialog_probe(tab):
     loop, t = tab
     assert run(loop, nc.nodriver_check_modal_dialog_popup(t)) is False
-    run(loop, t.evaluate(
-        "document.body.insertAdjacentHTML('beforeend',"
-        "'<div class=\"modal-dialog\"><div class=\"modal-content\">x</div></div>')"))
+    run(
+        loop,
+        t.evaluate(
+            "document.body.insertAdjacentHTML('beforeend',"
+            '\'<div class="modal-dialog"><div class="modal-content">x</div></div>\')'
+        ),
+    )
     assert run(loop, nc.nodriver_check_modal_dialog_popup(t)) is True
 
 
@@ -157,8 +182,10 @@ def test_wait_for_selector_reacts_within_poll_interval(tab):
     assert run(loop, nc.nodriver_wait_for_selector(t, "#late", timeout=0.2)) is False
 
     async def appear_later():
-        await t.evaluate("setTimeout(() => { const d = document.createElement('div');"
-                         " d.id = 'late'; document.body.appendChild(d); }, 300)")
+        await t.evaluate(
+            "setTimeout(() => { const d = document.createElement('div');"
+            " d.id = 'late'; document.body.appendChild(d); }, 300)"
+        )
         loop_ = asyncio.get_running_loop()
         t0 = loop_.time()
         ok = await nc.nodriver_wait_for_selector(t, "#late", timeout=3)
@@ -196,8 +223,12 @@ def test_scan_area_rows_absent_zone(browser, server):
 def test_get_tixcraft_target_area_filters(tab):
     loop, t = tab
     rows = run(loop, tixcraft.nodriver_tixcraft_scan_area_rows(t))
-    cfg = {"area_auto_select": {"mode": "from top to bottom"},
-           "keyword_exclude": "", "ticket_number": 2, "tixcraft": {"allow_less_tickets": False}}
+    cfg = {
+        "area_auto_select": {"mode": "from top to bottom"},
+        "keyword_exclude": "",
+        "ticket_number": 2,
+        "tixcraft": {"allow_less_tickets": False},
+    }
 
     need_refresh, matched = run(loop, tixcraft.nodriver_get_tixcraft_target_area(rows, cfg, "區域 B"))
     assert need_refresh is False

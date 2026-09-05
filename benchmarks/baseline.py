@@ -5,6 +5,7 @@ These are verbatim (modulo imports) snapshots of the code paths that were
 replaced, kept here so the benchmark can compare old vs new on the same
 browser session without checking out the old commit.
 """
+
 import asyncio
 
 from zendriver import cdp
@@ -15,9 +16,7 @@ async def baseline_current_url(tab):
     url = ""
     url_dict = {}
     try:
-        url_dict = await asyncio.wait_for(
-            tab.js_dumps('window.location.href'), timeout=5.0
-        )
+        url_dict = await asyncio.wait_for(tab.js_dumps("window.location.href"), timeout=5.0)
     except Exception:
         return url
     url_array = []
@@ -26,7 +25,7 @@ async def baseline_current_url(tab):
             if k.isnumeric():
                 if "0" in url_dict[k]:
                     url_array.append(url_dict[k]["0"])
-        url = ''.join(url_array)
+        url = "".join(url_array)
     return url
 
 
@@ -66,8 +65,8 @@ async def baseline_cf_detect_layers_2_3(tab):
     """Old detect_cloudflare_challenge layers 2+3 (layer 1 unchanged)."""
     try:
         cf_dom = await tab.evaluate(
-            '!!(document.querySelector(\'iframe[src*="challenges.cloudflare.com"]\')'
-            ' || document.querySelector(\'.cf-turnstile\'))'
+            "!!(document.querySelector('iframe[src*=\"challenges.cloudflare.com\"]')"
+            " || document.querySelector('.cf-turnstile'))"
         )
         if cf_dom:
             return True
@@ -91,10 +90,10 @@ async def baseline_cf_detect_layers_2_3(tab):
 async def baseline_area_scan(tab):
     """Old nodriver_tixcraft_area_auto_select pre-fetch: .zone element,
     then el.query_selector_all('a'), then the batch evaluate."""
-    el = await tab.query_selector('.zone')
+    el = await tab.query_selector(".zone")
     if not el:
         return None, None
-    area_list = await el.query_selector_all('a')
+    area_list = await el.query_selector_all("a")
     area_text = await tab.evaluate("""
         Array.from(document.querySelectorAll('.zone a')).map(a => ({
             text: a.innerText.trim(),

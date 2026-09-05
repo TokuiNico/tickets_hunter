@@ -7,6 +7,7 @@ after the banner is dismissed), ~40 area links under .zone with <font>
 seat counters, and a few thousand filler nodes so DOM.getDocument has a
 realistic payload. Deterministic output.
 """
+
 import os
 
 AREA_COUNT = 40
@@ -50,8 +51,10 @@ def build():
         "<input type='text' id='TicketForm_verifyCode'>"
         "<img id='TicketForm_verifyCode-image' alt='captcha'></form>"
     )
-    parts.append("<script>window.__clicks=0;document.querySelectorAll('.zone a')"
-                 ".forEach(a=>a.addEventListener('click',e=>{e.preventDefault();window.__clicks++;}));</script>")
+    parts.append(
+        "<script>window.__clicks=0;document.querySelectorAll('.zone a')"
+        ".forEach(a=>a.addEventListener('click',e=>{e.preventDefault();window.__clicks++;}));</script>"
+    )
     parts.append("</body></html>")
     return "".join(parts)
 

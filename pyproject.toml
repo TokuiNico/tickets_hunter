@@ -1,0 +1,116 @@
+[project]
+name = "tickets-hunter"
+version = "2026.9.5"
+description = "Tickets Hunter - multi-platform ticket purchasing automation (zendriver based)"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    # Browser automation engine (nodriver fork)
+    "zendriver==0.15.3",
+    # Settings web UI server
+    "tornado==6.5.4",
+    # HTTP helpers (Discord / Telegram notifications, Chrome download)
+    "requests==2.32.5",
+    "urllib3==2.6.3",
+    # OCR captcha solving
+    "ddddocr==1.5.6",
+    "onnxruntime==1.23.1",
+    "opencv-python==4.12.0.88",
+    "numpy==2.2.6",
+    "Pillow==11.3.0",
+    # Sound notifications / clipboard helpers
+    "playsound==1.2.2",
+    "pyperclip==1.11.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/bouob/tickets_hunter"
+Changelog = "https://github.com/bouob/tickets_hunter/blob/main/CHANGELOG.md"
+Issues = "https://github.com/bouob/tickets_hunter/issues"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "pytest-timeout>=2.3",
+    "pytest-playwright>=0.7",
+    "ruff>=0.12",
+    "pre-commit>=4.0",
+]
+build = [
+    "pyinstaller>=6.11",
+]
+
+[tool.uv]
+# src/ holds flat scripts (settings.py, nodriver_tixcraft.py); nothing to build/install.
+package = false
+default-groups = ["dev"]
+
+# ---------------------------------------------------------------------------
+# Ruff
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+src = ["src", "tests", "benchmarks"]
+extend-exclude = ["src/www", "src/assets", "build_scripts/*.spec"]
+
+[tool.ruff.lint]
+# The platform modules are large legacy files. CI enforces the rules that
+# catch real bugs (syntax errors, undefined names, unused imports, broken
+# comparisons); stylistic rules are opted into incrementally.
+select = [
+    "E9",   # syntax / io errors
+    "F",    # pyflakes
+    "E7",   # statement checks (comparisons, lambda assignment, ...)
+    "W6",   # deprecated constructs
+    "B006", # mutable default arguments
+    "B008", # function call in default argument
+    "PLE",  # pylint errors
+]
+ignore = [
+    "E722", # bare except: pervasive in the legacy platform modules
+    "E731", # lambda assignment
+    "E741", # ambiguous variable name
+    "F841", # unused local: pervasive in the legacy platform modules
+    "F541", # f-string without placeholders: stylistic, 170+ legacy sites
+    "E713", # `not x in y`: stylistic
+    "E714", # `not x is y`: stylistic
+    "F403", # star imports (nodriver_tixcraft aggregates platform modules)
+    "F405", # names from star imports
+]
+
+[tool.ruff.lint.per-file-ignores]
+# nodriver_common re-exports constants for platform modules.
+"src/nodriver_common.py" = ["F401"]
+# Probe imports (import ddddocr inside try/except) are intentional.
+"src/nodriver_tixcraft.py" = ["F401"]
+"src/settings.py" = ["F401"]
+"src/platforms/*.py" = ["F401"]
+"benchmarks/*.py" = ["F401", "E402"]
+"tests/**/*.py" = ["E402"]
+
+# ---------------------------------------------------------------------------
+# Pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests/unit"]
+pythonpath = ["src"]
+addopts = "-ra --strict-markers --timeout=120"
+markers = [
+    "e2e: end-to-end tests that launch the settings server and a real browser",
+    "browser: tests that need a local Chromium (skipped when none is found)",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:zendriver.*",
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["src/www/*", "src/assets/*"]
+
+[tool.coverage.report]
+skip_empty = true
+show_missing = true

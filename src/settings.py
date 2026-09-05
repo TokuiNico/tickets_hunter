@@ -972,14 +972,12 @@ class OcrHandler(tornado.web.RequestHandler):
 
         self.write({"answer": ocr_answer})
 
-async def main_server():
-    ocr = None
-    try:
-        ocr = ddddocr.DdddOcr(show_ad=False, beta=True)
-    except Exception as exc:
-        print(exc)
-        pass
+def make_app(ocr=None):
+    """Build the tornado Application serving the settings UI and JSON API.
 
+    Kept separate from main_server() so tests can mount the same routes
+    on an ephemeral port without starting the OCR engine or a browser.
+    """
     app = Application([
         ("/version", VersionHandler),
         ("/shutdown", ShutdownHandler),
@@ -1005,24 +1003,32 @@ async def main_server():
         ("/question", QuestionHandler),
         ('/(.*)', NoCacheStaticFileHandler, {"path": os.path.join(SCRIPT_DIR, 'www')}),
     ])
-    app.ocr = ocr;
-    app.version = CONST_APP_VERSION;
+    app.ocr = ocr
+    app.version = CONST_APP_VERSION
+    return app
+
+async def main_server():
+    ocr = None
+    try:
+        ocr = ddddocr.DdddOcr(show_ad=False, beta=True)
+    except Exception as exc:
+        print(exc)
+        pass
+
+    app = make_app(ocr)
 
     # Get server_port from config, fallback to default (Issue #156)
-    _, config_dict = load_json()
-    server_port = config_dict.get("advanced", {}).get("server_port", CONST_SERVER_PORT)
-
-    # Validate port range
-    if not isinstance(server_port, int) or server_port < 1024 or server_port > 65535:
-        print(f"[WARNING] Invalid server_port: {server_port}, using default: {CONST_SERVER_PORT}")
-        server_port = CONST_SERVER_PORT
+    server_port = get_server_port()
 
     app.listen(server_port)
     print("server running on port:", server_port)
 
     url = "http://127.0.0.1:" + str(server_port) + "/settings.html"
     print("goto url:", url)
-    webbrowser.open_new(url)
+    # TICKETS_HUNTER_NO_BROWSER=1 keeps headless environments (CI, e2e tests)
+    # from trying to launch a desktop browser.
+    if not os.environ.get("TICKETS_HUNTER_NO_BROWSER"):
+        webbrowser.open_new(url)
     await asyncio.Event().wait()
 
 def get_server_port():
@@ -1030,6 +1036,7 @@ def get_server_port():
     _, config_dict = load_json()
     server_port = config_dict.get("advanced", {}).get("server_port", CONST_SERVER_PORT)
     if not isinstance(server_port, int) or server_port < 1024 or server_port > 65535:
+        print(f"[WARNING] Invalid server_port: {server_port}, using default: {CONST_SERVER_PORT}")
         server_port = CONST_SERVER_PORT
     return server_port
 

@@ -5,15 +5,13 @@ with caches; these tests pin the observable behaviour to the pre-cache
 semantics (including the odd corners: invalid JSON, empty strings, mutation
 safety, instance-id switching).
 """
+
 import json
 import os
-import sys
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
-
-import util  # noqa: E402
+import util
 
 
 def _old_parse(keyword_string):
@@ -25,10 +23,21 @@ def _old_parse(keyword_string):
         return []
 
 
-@pytest.mark.parametrize("kw", [
-    '', '   ', '"VIP"', '"VIP","1F"', '"VIP Rock Area"', 'invalid', '"unterminated',
-    '"3,280","2,680"', '["a","b"],"c"', '"搖滾區","看台"',
-])
+@pytest.mark.parametrize(
+    "kw",
+    [
+        "",
+        "   ",
+        '"VIP"',
+        '"VIP","1F"',
+        '"VIP Rock Area"',
+        "invalid",
+        '"unterminated',
+        '"3,280","2,680"',
+        '["a","b"],"c"',
+        '"搖滾區","看台"',
+    ],
+)
 def test_parse_keyword_string_to_array_matches_old(kw):
     assert util.parse_keyword_string_to_array(kw) == _old_parse(kw)
 
@@ -40,19 +49,22 @@ def test_parse_keyword_string_to_array_returns_fresh_list():
     assert b == ["VIP", "1F"]
 
 
-@pytest.mark.parametrize("kw,text,expected", [
-    ("", "anything", True),
-    ("VIP", "", True),
-    ("VIP", "VIP zone", True),
-    ("VIP", "General", False),
-    ("3,280;2,680", "Area B 2,680", True),
-    ("3,280;2,680", "Area B 1,980", False),
-    ('"1280 一般"', "1280 一般票", True),
-    ('"1280 一般"', "1280 學生票", False),
-    ('"VIP","1F"', "1F seats", True),
-    ('""', "anything", True),           # empty item matches all
-    ('not json"', "anything", False),   # unparsable -> no match
-])
+@pytest.mark.parametrize(
+    "kw,text,expected",
+    [
+        ("", "anything", True),
+        ("VIP", "", True),
+        ("VIP", "VIP zone", True),
+        ("VIP", "General", False),
+        ("3,280;2,680", "Area B 2,680", True),
+        ("3,280;2,680", "Area B 1,980", False),
+        ('"1280 一般"', "1280 一般票", True),
+        ('"1280 一般"', "1280 學生票", False),
+        ('"VIP","1F"', "1F seats", True),
+        ('""', "anything", True),  # empty item matches all
+        ('not json"', "anything", False),  # unparsable -> no match
+    ],
+)
 def test_is_text_match_keyword(kw, text, expected):
     assert util.is_text_match_keyword(kw, text) is expected
 
@@ -63,16 +75,19 @@ def test_is_text_match_keyword_repeated_calls_are_stable():
         assert util.is_text_match_keyword("3,280;2,680", "Area 9,999") is False
 
 
-EXCLUDE = "\"輪椅\",\"身障\",\"身心\",\"障礙\",\"愛心\",\"Restricted View\",\"燈柱遮蔽\",\"視線不完整\""
+EXCLUDE = '"輪椅","身障","身心","障礙","愛心","Restricted View","燈柱遮蔽","視線不完整"'
 
 
-@pytest.mark.parametrize("row,expected", [
-    ("2F 區域 B 3,280 熱賣中", False),
-    ("輪椅席 1,200", True),
-    ("Restricted View seat", True),
-    ("Restricted　View seat", True),  # full-width space stripped by format_keyword_string
-    ("", True),  # legacy semantics: empty row text counts as excluded
-])
+@pytest.mark.parametrize(
+    "row,expected",
+    [
+        ("2F 區域 B 3,280 熱賣中", False),
+        ("輪椅席 1,200", True),
+        ("Restricted View seat", True),
+        ("Restricted　View seat", True),  # full-width space stripped by format_keyword_string
+        ("", True),  # legacy semantics: empty row text counts as excluded
+    ],
+)
 def test_reset_row_text_if_match_keyword_exclude(row, expected):
     assert util.reset_row_text_if_match_keyword_exclude({"keyword_exclude": EXCLUDE}, row) is expected
 
