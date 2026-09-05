@@ -156,7 +156,6 @@ tickets_hunter/
 │   │       ├── dist/               # 編譯後檔案
 │   │       └── icons/              # 圖示資源
 │   └── 🔧 輔助工具
-│       ├── NonBrowser.py           # 非瀏覽器模式處理
 │       └── assets/                 # 資源檔案
 │           └── sounds/             # 音效檔
 └── 📋 專案資訊

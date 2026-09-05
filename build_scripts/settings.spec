@@ -35,7 +35,6 @@ a = Analysis(
         'tornado.websocket',
         # Shared utilities (important!)
         'util',
-        'NonBrowser',
         # Optional: ddddocr (if settings.py uses it)
         'ddddocr',
         'onnxruntime',

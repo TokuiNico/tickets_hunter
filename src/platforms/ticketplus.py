@@ -1574,7 +1574,7 @@ async def _ticketplus_monitor_queue(tab, config_dict, debug):
     return "timeout"
 
 
-async def nodriver_ticketplus_order(tab, config_dict, ocr, Captcha_Browser):
+async def nodriver_ticketplus_order(tab, config_dict, ocr):
     """TicketPlus order processing - supports three layout detection modes.
 
     Modifies _state in place (no return value).
@@ -1879,7 +1879,7 @@ async def nodriver_ticketplus_order_exclusive_code(tab, config_dict, fail_list):
         return False, fail_list, False
 
 
-async def nodriver_ticketplus_main(tab, url, config_dict, ocr, Captcha_Browser):
+async def nodriver_ticketplus_main(tab, url, config_dict, ocr):
     """TicketPlus main entry point.
 
     Returns:
@@ -1903,11 +1903,6 @@ async def nodriver_ticketplus_main(tab, url, config_dict, ocr, Captcha_Browser):
     home_url = 'https://ticketplus.com.tw/'
     is_user_signin = False
     if home_url == url.lower():
-        if config_dict["ocr_captcha"]["enable"]:
-            domain_name = url.split('/')[2]
-            if not Captcha_Browser is None:
-                Captcha_Browser.set_domain(domain_name)
-
         is_user_signin = await nodriver_ticketplus_account_auto_fill(tab, config_dict)
 
     if is_user_signin:
@@ -1983,7 +1978,7 @@ async def nodriver_ticketplus_main(tab, url, config_dict, ocr, Captcha_Browser):
                 debug.log("[ORDER FAIL][DEGRADED] Detection unavailable, skipping order submission this cycle")
                 return _get_status()
 
-            await nodriver_ticketplus_order(tab, config_dict, ocr, Captcha_Browser)
+            await nodriver_ticketplus_order(tab, config_dict, ocr)
 
     else:
         _state["fail_list"] = []

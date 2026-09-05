@@ -112,7 +112,6 @@ if config_dict["ocr_captcha"]["enable"]:
 | `enable` | `true` | 是否啟用 OCR |
 | `beta` | `true` | 官方 ddddocr 的 beta 模式（回退時用） |
 | `force_submit` | `true` | 辨識後自動送出 |
-| `image_source` | `canvas` | 圖片來源（canvas / NonBrowser） |
 | `use_universal` | `true` | **自訓練模型總開關**，關閉則一律用官方 ddddocr |
 | `path` | `assets/model/universal` | 模型目錄；非預設值視為使用者自訂路徑 |
 

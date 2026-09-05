@@ -1,21 +1,15 @@
 #!/usr/bin/env python3
 #encoding=utf-8
 import argparse
-import base64
 import json
 import logging
 import asyncio
 import os
-import pathlib
-import platform
 import random
 import ssl
-import subprocess
 import sys
-import threading
 import time
 import warnings
-import webbrowser
 from datetime import datetime
 
 # 強制使用 UTF-8 編碼輸出（解決 Windows CP950 編碼問題）
@@ -31,8 +25,6 @@ from urllib3.exceptions import InsecureRequestWarning
 import urllib.parse
 
 import util
-import settings
-from NonBrowser import NonBrowser
 
 try:
     import ddddocr
@@ -480,33 +472,7 @@ async def nodrver_block_urls(tab, config_dict):
         print(f"Warning: Failed to enable network blocking: {exc}")
         # Continue without network blocking if it fails
 
-    # TicketPlus: clarity.ms is unblocked above; stub injection no longer needed
-    # if is_ticketplus:
-    #     await _inject_clarity_stub_for_ticketplus(tab)
-
     return tab
-
-
-async def _inject_clarity_stub_for_ticketplus(tab):
-    """
-    Simulate Microsoft Clarity presence for TicketPlus without loading the real script.
-    Injects a window.clarity queue stub so the Clarity tag script proceeds normally.
-    Do NOT set .v or .t: tag script checks 'if (clarity.v || clarity.t) return early',
-    so setting .v would prevent clarity.js from loading and no beacon would be sent.
-    """
-    # window.clarity stub: queue function only, lets tag script load clarity.js and send beacons
-    clarity_stub_js = """(function() {
-        if (typeof window.clarity === 'undefined') {
-            var _cq = [];
-            window.clarity = function() { _cq.push(arguments); };
-            window.clarity.q = _cq;
-        }
-    })();"""
-    try:
-        await tab.send(cdp.page.add_script_to_evaluate_on_new_document(source=clarity_stub_js))
-    except Exception as exc:
-        print(f"[TicketPlus] Warning: Failed to inject Clarity stub: {exc}")
-
 
 
 def parse_refresh_datetime(target_str):
@@ -743,17 +709,12 @@ async def main(args):
     last_paused_state = False  # Track pause state changes
 
     ocr = None
-    Captcha_Browser = None
     try:
         if config_dict["ocr_captcha"]["enable"]:
             ocr = create_ocr_for_platform(config_dict)
             if ocr is None:
                 ocr = ddddocr.DdddOcr(show_ad=False, beta=config_dict["ocr_captcha"]["beta"])
                 ocr.set_ranges(1)
-            Captcha_Browser = NonBrowser()
-            if len(config_dict["accounts"]["tixcraft_sid"]) > 1:
-                #set_non_browser_cookies(driver, config_dict["homepage"], Captcha_Browser)
-                pass
     except Exception as exc:
         debug = util.create_debug_logger(config_dict)
         debug.log(f"[OCR INIT] Failed to initialize OCR: {exc}")
@@ -915,7 +876,7 @@ async def main(args):
             tixcraft_family = True
 
         if tixcraft_family:
-            is_quit_bot = await nodriver_tixcraft_main(tab, url, config_dict, ocr, Captcha_Browser)
+            is_quit_bot = await nodriver_tixcraft_main(tab, url, config_dict, ocr)
             if is_quit_bot:
                 # 不自動暫停：讓多開實例可獨立運作
                 # 保留 is_quit_bot = False 以防止程式結束，但不建立暫停檔案
@@ -925,7 +886,7 @@ async def main(args):
             await nodriver_famiticket_main(tab, url, config_dict)
 
         if 'ibon.com' in url:
-            await nodriver_ibon_main(tab, url, config_dict, ocr, Captcha_Browser)
+            await nodriver_ibon_main(tab, url, config_dict, ocr)
 
         kham_family = False
         if 'kham.com.tw' in url:
@@ -942,7 +903,7 @@ async def main(args):
 
         # https://ticketplus.com.tw/*
         if 'ticketplus.com' in url and not ticketplus_purchase_done:
-            tp_status = await nodriver_ticketplus_main(tab, url, config_dict, ocr, Captcha_Browser)
+            tp_status = await nodriver_ticketplus_main(tab, url, config_dict, ocr)
 
             if isinstance(tp_status, dict):
                 if tp_status.get("purchase_completed", False):

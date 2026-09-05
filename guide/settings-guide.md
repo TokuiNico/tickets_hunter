@@ -462,21 +462,6 @@ python settings.py
 
 ---
 
-#### OCR圖片取得方式（image_source）
-類型：字串 | 預設：canvas
-
-驗證碼圖片的取得方式。
-
-**可選值**：
-- `canvas`（預設）— 透過 JavaScript Canvas API 從畫面擷取驗證碼圖片
-- `NonBrowser` — 啟動獨立的 NonBrowser 視窗取得驗證碼（需搭配外部驗證碼工具使用）
-
-**使用情境**：
-- 一般情況使用 `canvas`（預設）即可
-- 若主瀏覽器無法正確擷取驗證碼，可嘗試切換為 `NonBrowser`
-
----
-
 #### 自訂 OCR 模型
 類型：字串 | 預設：空白
 

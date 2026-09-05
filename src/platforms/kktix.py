@@ -9,7 +9,6 @@ from datetime import datetime
 import json
 import os
 import random
-import re
 import threading
 import time
 import urllib.parse
@@ -701,7 +700,7 @@ async def nodriver_kktix_assign_ticket_number(tab, config_dict, kktix_area_keywo
 
     return is_dom_ready, is_ticket_number_assigned, is_need_refresh
 
-async def nodriver_kktix_reg_captcha(tab, config_dict, fail_list, registrationsNewApp_div):
+async def nodriver_kktix_reg_captcha(tab, config_dict, fail_list):
     """增強版驗證碼處理，包含重試機制和人類化延遲"""
     debug = util.create_debug_logger(config_dict)
 
@@ -732,7 +731,7 @@ async def nodriver_kktix_reg_captcha(tab, config_dict, fail_list, registrationsN
             answer_list = util.get_answer_list_from_user_guess_string(config_dict, CONST_MAXBOT_ANSWER_ONLINE_FILE)
             if len(answer_list)==0:
                 if config_dict["advanced"]["auto_guess_options"]:
-                    answer_list = util.get_answer_list_from_question_string(None, question_text, config_dict)
+                    answer_list = util.get_answer_list_from_question_string(question_text, config_dict)
 
             inferred_answer_string = ""
             for answer_item in answer_list:
@@ -2052,7 +2051,7 @@ async def nodriver_kktix_reg_new_main(tab, config_dict, fail_list, played_sound_
                 debug_state = await debug_kktix_page_state(tab, debug.enabled)
 
                 # whole event question.
-                fail_list, is_question_popup, button_clicked_in_captcha = await nodriver_kktix_reg_captcha(tab, config_dict, fail_list, registrationsNewApp_div)
+                fail_list, is_question_popup, button_clicked_in_captcha = await nodriver_kktix_reg_captcha(tab, config_dict, fail_list)
 
                 # 驗證碼處理後檢查暫停
                 if await check_and_handle_pause(config_dict):

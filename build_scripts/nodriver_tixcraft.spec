@@ -37,7 +37,6 @@ a = Analysis(
         'zendriver.core',
         # Shared utilities (important!)
         'util',
-        'NonBrowser',
         'chrome_downloader',
         # Modular architecture
         'nodriver_common',

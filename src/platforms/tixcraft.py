@@ -10,15 +10,8 @@ import base64
 import json
 import os
 import random
-import re
 import time
-import traceback
 import webbrowser
-
-try:
-    import ddddocr
-except Exception:
-    pass
 
 from zendriver import cdp
 
@@ -37,8 +30,6 @@ from nodriver_common import (
     write_question_to_file,
     CONST_MAXBOT_ANSWER_ONLINE_FILE,
     CONST_MAXBOT_INT28_FILE,
-    CONST_OCR_CAPTCH_IMAGE_SOURCE_CANVAS,
-    CONST_OCR_CAPTCH_IMAGE_SOURCE_NON_BROWSER,
 )
 
 __all__ = [
@@ -1158,7 +1149,7 @@ async def nodriver_ticketmaster_assign_ticket_number(tab, config_dict):
 # User Story 4: Captcha Handling (T019)
 # ============================================
 
-async def nodriver_ticketmaster_captcha(tab, config_dict, ocr, captcha_browser):
+async def nodriver_ticketmaster_captcha(tab, config_dict, ocr):
     """
     Handle captcha on Ticketmaster check-captcha page.
     Returns: True if captcha was handled, False otherwise
@@ -1223,13 +1214,11 @@ async def nodriver_ticketmaster_captcha(tab, config_dict, ocr, captcha_browser):
                 alert_state["detected"] = False  # Reset before each attempt
 
                 away_from_keyboard_enable = config_dict.get("ocr_captcha", {}).get("force_submit", False)
-                ocr_captcha_image_source = config_dict.get("ocr_captcha", {}).get("image_source", "canvas")
                 domain_name = tab.target.url.split('/')[2]
 
                 # Call tixcraft_auto_ocr for captcha recognition
                 is_need_redo_ocr, previous_answer, is_form_submitted = await nodriver_tixcraft_auto_ocr(
-                    tab, config_dict, ocr, away_from_keyboard_enable, previous_answer,
-                    captcha_browser, ocr_captcha_image_source, domain_name
+                    tab, config_dict, ocr, away_from_keyboard_enable, previous_answer, domain_name
                 )
 
                 if is_form_submitted:
@@ -1926,8 +1915,6 @@ async def nodriver_tixcraft_area_auto_select(tab, url, config_dict):
         debug.log("[AREA SELECT] Main switch is disabled, skipping area selection")
         return False
 
-    import json
-
     area_keyword = config_dict["area_auto_select"]["area_keyword"].strip()
     auto_select_mode = config_dict["area_auto_select"]["mode"]
     area_auto_fallback = config_dict.get('area_auto_fallback', False)  # T021: Safe access for new field
@@ -2314,7 +2301,6 @@ async def nodriver_tixcraft_assign_ticket_number(tab, config_dict):
         debug.log(f"[TICKET SELECT] Found {form_select_count} select element(s)")
 
     # Get area keyword configuration
-    import json
     area_keyword = config_dict["area_auto_select"]["area_keyword"].strip()
     area_auto_fallback = config_dict.get('area_auto_fallback', False)
     auto_select_mode = config_dict["area_auto_select"]["mode"]
@@ -2552,7 +2538,7 @@ async def nodriver_tixcraft_ticket_main_agree(tab, config_dict):
     if not is_finish_checkbox_click:
         debug.log("Warning: Failed to check agreement checkbox")
 
-async def nodriver_tixcraft_ticket_main(tab, config_dict, ocr, Captcha_Browser, domain_name):
+async def nodriver_tixcraft_ticket_main(tab, config_dict, ocr, domain_name):
     # 函數開始時檢查暫停
     if await check_and_handle_pause(config_dict):
         return False
@@ -2583,7 +2569,7 @@ async def nodriver_tixcraft_ticket_main(tab, config_dict, ocr, Captcha_Browser, 
         # Skip OCR if already completed on this URL (non-force_submit mode only)
         is_force_submit = config_dict["ocr_captcha"]["force_submit"]
         if is_force_submit or _state.get("ocr_completed_url", "") != current_url:
-            await nodriver_tixcraft_ticket_main_ocr(tab, config_dict, ocr, Captcha_Browser, domain_name)
+            await nodriver_tixcraft_ticket_main_ocr(tab, config_dict, ocr, domain_name)
         return
 
     # Always check agreement checkbox in NoDriver mode
@@ -2609,7 +2595,7 @@ async def nodriver_tixcraft_ticket_main(tab, config_dict, ocr, Captcha_Browser, 
     if is_ticket_number_assigned:
         _state[ticket_state_key] = True
         debug.log("Ticket number set successfully, starting OCR captcha processing")
-        await nodriver_tixcraft_ticket_main_ocr(tab, config_dict, ocr, Captcha_Browser, domain_name)
+        await nodriver_tixcraft_ticket_main_ocr(tab, config_dict, ocr, domain_name)
     else:
         # T026: Fix Issue #174 - reload page when ticket number cannot be set
         # This prevents infinite loop when desired ticket count is unavailable
@@ -2857,7 +2843,7 @@ async def nodriver_tixcraft_reload_captcha(tab, domain_name, config_dict=None):
         debug.log(f"[TIXCRAFT OCR] reload_captcha failed: {exc}")
     return False
 
-async def nodriver_tixcraft_get_ocr_answer(tab, ocr, ocr_captcha_image_source, Captcha_Browser, domain_name):
+async def nodriver_tixcraft_get_ocr_answer(tab, ocr):
     """取得驗證碼圖片並進行 OCR 識別"""
     debug = util.create_debug_logger(enabled=False)  # OCR: intentionally silent
 
@@ -2865,52 +2851,38 @@ async def nodriver_tixcraft_get_ocr_answer(tab, ocr, ocr_captcha_image_source, C
     if not ocr is None:
         img_base64 = None
 
-        if ocr_captcha_image_source == CONST_OCR_CAPTCH_IMAGE_SOURCE_NON_BROWSER:
-            if not Captcha_Browser is None:
-                img_base64 = base64.b64decode(Captcha_Browser.request_captcha())
+        try:
+            # Stage 7: get captcha image via canvas
+            # async IIFE waits for image load to avoid reading stale image after reload
+            form_verifyCode_base64 = await tab.evaluate('''
+                (async function() {
+                    var img = document.getElementById('TicketForm_verifyCode-image');
+                    if(!img || !img.src) return null;
 
-        if ocr_captcha_image_source == CONST_OCR_CAPTCH_IMAGE_SOURCE_CANVAS:
-            image_id = 'TicketForm_verifyCode-image'
-            if 'indievox.com' in domain_name:
-                image_id = 'TicketForm_verifyCode-image'
+                    if(img.naturalWidth === 0 || !img.complete) {
+                        await new Promise(function(resolve) {
+                            var timer = setTimeout(resolve, 3000);
+                            img.onload = function() { clearTimeout(timer); resolve(); };
+                            img.onerror = function() { clearTimeout(timer); resolve(); };
+                        });
+                    }
 
-            try:
-                # Stage 7: get captcha image via canvas
-                # async IIFE waits for image load to avoid reading stale image after reload
-                form_verifyCode_base64 = await tab.evaluate(f'''
-                    (async function() {{
-                        var img = document.getElementById('{image_id}');
-                        if(!img || !img.src) return null;
+                    if(img.naturalWidth === 0 || img.naturalHeight === 0) return null;
 
-                        if(img.naturalWidth === 0 || !img.complete) {{
-                            await new Promise(function(resolve) {{
-                                var timer = setTimeout(resolve, 3000);
-                                img.onload = function() {{ clearTimeout(timer); resolve(); }};
-                                img.onerror = function() {{ clearTimeout(timer); resolve(); }};
-                            }});
-                        }}
+                    var canvas = document.createElement('canvas');
+                    var context = canvas.getContext('2d');
+                    canvas.height = img.naturalHeight;
+                    canvas.width = img.naturalWidth;
+                    context.drawImage(img, 0, 0);
+                    return canvas.toDataURL();
+                })();
+            ''', await_promise=True)
 
-                        if(img.naturalWidth === 0 || img.naturalHeight === 0) return null;
+            if form_verifyCode_base64:
+                img_base64 = base64.b64decode(form_verifyCode_base64.split(',')[1])
 
-                        var canvas = document.createElement('canvas');
-                        var context = canvas.getContext('2d');
-                        canvas.height = img.naturalHeight;
-                        canvas.width = img.naturalWidth;
-                        context.drawImage(img, 0, 0);
-                        return canvas.toDataURL();
-                    }})();
-                ''', await_promise=True)
-
-                if form_verifyCode_base64:
-                    img_base64 = base64.b64decode(form_verifyCode_base64.split(',')[1])
-
-                if img_base64 is None:
-                    if not Captcha_Browser is None:
-                        debug.log("[TIXCRAFT OCR] Failed to get image from canvas, using fallback: NonBrowser")
-                        img_base64 = base64.b64decode(Captcha_Browser.request_captcha())
-
-            except Exception as exc:
-                debug.log("[TIXCRAFT OCR] Canvas error:", str(exc))
+        except Exception as exc:
+            debug.log("[TIXCRAFT OCR] Canvas error:", str(exc))
 
         # OCR 識別
         if not img_base64 is None:
@@ -2922,8 +2894,7 @@ async def nodriver_tixcraft_get_ocr_answer(tab, ocr, ocr_captcha_image_source, C
     return ocr_answer
 
 async def nodriver_tixcraft_auto_ocr(tab, config_dict, ocr, away_from_keyboard_enable,
-                                     previous_answer, Captcha_Browser,
-                                     ocr_captcha_image_source, domain_name):
+                                     previous_answer, domain_name):
     """OCR 自動識別主邏輯"""
     debug = util.create_debug_logger(config_dict)
 
@@ -2944,10 +2915,9 @@ async def nodriver_tixcraft_auto_ocr(tab, config_dict, ocr, away_from_keyboard_e
     if is_input_box_exist:
         debug.log("[TIXCRAFT OCR] away_from_keyboard_enable:", away_from_keyboard_enable)
         debug.log("[TIXCRAFT OCR] previous_answer:", previous_answer)
-        debug.log("[TIXCRAFT OCR] ocr_captcha_image_source:", ocr_captcha_image_source)
 
         ocr_start_time = time.time()
-        ocr_answer = await nodriver_tixcraft_get_ocr_answer(tab, ocr, ocr_captcha_image_source, Captcha_Browser, domain_name)
+        ocr_answer = await nodriver_tixcraft_get_ocr_answer(tab, ocr)
         ocr_done_time = time.time()
         ocr_elapsed_time = ocr_done_time - ocr_start_time
         debug.log("[TIXCRAFT OCR] Processing time:", "{:.3f}".format(ocr_elapsed_time))
@@ -2992,15 +2962,13 @@ async def nodriver_tixcraft_auto_ocr(tab, config_dict, ocr, away_from_keyboard_e
                         debug.log("[TIXCRAFT OCR] Reloading captcha")
 
                         await nodriver_tixcraft_reload_captcha(tab, domain_name)
-
-                        if ocr_captcha_image_source == CONST_OCR_CAPTCH_IMAGE_SOURCE_CANVAS:
-                            await asyncio.sleep(0.3)
+                        await asyncio.sleep(0.3)
     else:
         debug.log("[TIXCRAFT OCR] Input box not found, exiting OCR...")
 
     return is_need_redo_ocr, previous_answer, is_form_submitted
 
-async def nodriver_tixcraft_ticket_main_ocr(tab, config_dict, ocr, Captcha_Browser, domain_name):
+async def nodriver_tixcraft_ticket_main_ocr(tab, config_dict, ocr, domain_name):
     """票券頁面 OCR 處理主函數"""
     # 函數開始時檢查暫停
     if await check_and_handle_pause(config_dict):
@@ -3011,7 +2979,6 @@ async def nodriver_tixcraft_ticket_main_ocr(tab, config_dict, ocr, Captcha_Brows
     away_from_keyboard_enable = config_dict["ocr_captcha"]["force_submit"]
     if not config_dict["ocr_captcha"]["enable"]:
         away_from_keyboard_enable = False
-    ocr_captcha_image_source = config_dict["ocr_captcha"]["image_source"]
 
     if not config_dict["ocr_captcha"]["enable"]:
         # 手動模式
@@ -3026,8 +2993,7 @@ async def nodriver_tixcraft_ticket_main_ocr(tab, config_dict, ocr, Captcha_Brows
 
         for redo_ocr in range(5):
             is_need_redo_ocr, previous_answer, is_form_submitted = await nodriver_tixcraft_auto_ocr(
-                tab, config_dict, ocr, away_from_keyboard_enable,
-                previous_answer, Captcha_Browser, ocr_captcha_image_source, domain_name
+                tab, config_dict, ocr, away_from_keyboard_enable, previous_answer, domain_name
             )
 
             if is_form_submitted:
@@ -3159,7 +3125,7 @@ async def nodriver_ticketmaster_check_ip_block(tab, config_dict, current_url="")
         return False
 
 
-async def nodriver_tixcraft_main(tab, url, config_dict, ocr, Captcha_Browser):
+async def nodriver_tixcraft_main(tab, url, config_dict, ocr):
     # 函數開始時檢查暫停
     if await check_and_handle_pause(config_dict):
         return False
@@ -3424,7 +3390,7 @@ async def nodriver_tixcraft_main(tab, url, config_dict, ocr, Captcha_Browser):
             ticketmaster_captcha_processed = _state.get("ticketmaster_captcha_processed_url", "")
             if ticketmaster_captcha_processed != url:
                 # Call Ticketmaster captcha handler
-                await nodriver_ticketmaster_captcha(tab, config_dict, ocr, Captcha_Browser)
+                await nodriver_ticketmaster_captcha(tab, config_dict, ocr)
                 # Mark this URL as processed
                 _state["ticketmaster_captcha_processed_url"] = url
     else:
@@ -3440,7 +3406,7 @@ async def nodriver_tixcraft_main(tab, url, config_dict, ocr, Captcha_Browser):
     # main app, to select ticket number.
     if '/ticket/ticket/' in url:
         domain_name = url.split('/')[2]
-        await nodriver_tixcraft_ticket_main(tab, config_dict, ocr, Captcha_Browser, domain_name)
+        await nodriver_tixcraft_ticket_main(tab, config_dict, ocr, domain_name)
         _state["done_time"] = time.time()
 
         if not _state["played_sound_ticket"]:

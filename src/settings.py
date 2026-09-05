@@ -4,11 +4,8 @@ import asyncio
 import base64
 import json
 import os
-import platform
 import re
 import shutil
-import subprocess
-import sys
 import threading
 import time
 import webbrowser
@@ -20,23 +17,7 @@ from tornado.web import StaticFileHandler
 
 import requests
 import util
-
-from typing import (
-    Dict,
-    Any,
-    Union,
-    Optional,
-    Awaitable,
-    Tuple,
-    List,
-    Callable,
-    Iterable,
-    Generator,
-    Type,
-    TypeVar,
-    cast,
-    overload,
-)
+from util import CONST_RANDOM
 
 try:
     import ddddocr
@@ -106,17 +87,10 @@ def list_profile_names():
                 names.append(stem)
     return [CONST_DEFAULT_PROFILE] + names
 
-CONST_FROM_TOP_TO_BOTTOM = "from top to bottom"
-CONST_FROM_BOTTOM_TO_TOP = "from bottom to top"
-CONST_CENTER = "center"
-CONST_RANDOM = "random"
 CONST_SELECT_ORDER_DEFAULT = CONST_RANDOM
 CONST_EXCLUDE_DEFAULT = "\"輪椅\",\"身障\",\"身心\",\"障礙\",\"愛心\",\"Restricted View\",\"燈柱遮蔽\",\"視線不完整\""
 CONST_CAPTCHA_SOUND_FILENAME_DEFAULT = "assets/sounds/ding-dong.wav"
 CONST_HOMEPAGE_DEFAULT = "about:blank"
-
-CONST_OCR_CAPTCH_IMAGE_SOURCE_NON_BROWSER = "NonBrowser"
-CONST_OCR_CAPTCH_IMAGE_SOURCE_CANVAS = "canvas"
 
 CONST_WEBDRIVER_TYPE_NODRIVER = "nodriver"
 
@@ -161,7 +135,6 @@ def get_default_config():
     config_dict["ocr_captcha"]["enable"] = True
     config_dict["ocr_captcha"]["beta"] = True
     config_dict["ocr_captcha"]["force_submit"] = True
-    config_dict["ocr_captcha"]["image_source"] = CONST_OCR_CAPTCH_IMAGE_SOURCE_CANVAS
     config_dict["ocr_captcha"]["use_universal"] = True
     config_dict["ocr_captcha"]["path"] = "assets/model/universal"
     config_dict["webdriver_type"] = CONST_WEBDRIVER_TYPE_NODRIVER
@@ -330,6 +303,10 @@ def migrate_config(config_dict):
     # Ensure ocr_captcha.path exists
     if "ocr_captcha" in config_dict and "path" not in config_dict["ocr_captcha"]:
         config_dict["ocr_captcha"]["path"] = "assets/model/universal"
+
+    # Drop removed ocr_captcha.image_source (captcha images are always read from canvas)
+    if isinstance(config_dict.get("ocr_captcha"), dict):
+        config_dict["ocr_captcha"].pop("image_source", None)
 
     # Migrate server_port: ensure old config has this field (Issue #156)
     if "advanced" in config_dict:
@@ -995,36 +972,6 @@ class OcrHandler(tornado.web.RequestHandler):
 
         self.write({"answer": ocr_answer})
 
-class QueryHandler(tornado.web.RequestHandler):
-    def format_config_keyword_for_json(self, user_input):
-        if len(user_input) > 0:
-            # Remove any existing quotes first
-            user_input = user_input.replace('"', '').replace("'", '')
-
-            # Add quotes to each keyword
-            # Use semicolon as the ONLY delimiter (Issue #23)
-            if util.CONST_KEYWORD_DELIMITER in user_input:
-                items = user_input.split(util.CONST_KEYWORD_DELIMITER)
-                user_input = ','.join([f'"{item.strip()}"' for item in items if item.strip()])
-            else:
-                user_input = f'"{user_input.strip()}"'
-        return user_input
-
-    def compose_as_json(self, user_input):
-        user_input = self.format_config_keyword_for_json(user_input)
-        return "{\"data\":[%s]}" % user_input
-
-    def get(self):
-        global txt_answer_value
-        answer_text = ""
-        try:
-            answer_text = txt_answer_value.get().strip()
-        except Exception as exc:
-            pass
-        answer_text_output = self.compose_as_json(answer_text)
-        #print("answer_text_output:", answer_text_output)
-        self.write(answer_text_output)
-
 async def main_server():
     ocr = None
     try:
@@ -1055,7 +1002,6 @@ async def main_server():
         ("/test_discord_webhook", TestDiscordWebhookHandler),
         ("/test_telegram", TestTelegramHandler),
         ("/ocr", OcrHandler),
-        ("/query", QueryHandler),
         ("/question", QuestionHandler),
         ('/(.*)', NoCacheStaticFileHandler, {"path": os.path.join(SCRIPT_DIR, 'www')}),
     ])

@@ -1362,7 +1362,6 @@ async def nodriver_platform_date_auto_select(tab, config_dict):
 ```
 **多重處理策略**:
 - **Canvas 擷取**: 使用 JavaScript 從圖片元素提取 base64
-- **NonBrowser 備案**: Canvas 失敗時的外部 API 方案
 - **長度驗證**: 檢查答案長度 (通常 4 位)
 - **重試機制**: 最多 19 次重試
 - **驗證碼刷新**: 點擊圖片重新產生驗證碼
