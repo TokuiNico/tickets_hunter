@@ -9,6 +9,7 @@ page carrying interstitial markers.
 
 import asyncio
 import http.server
+import logging
 import os
 import shutil
 import sys
@@ -26,6 +27,7 @@ FIXTURES = os.path.join(ROOT, "benchmarks", "fixtures")
 
 def _find_chrome():
     for cand in (
+        os.environ.get("TICKETS_HUNTER_E2E_CHROMIUM"),
         "/opt/pw-browsers/chromium-1194/chrome-linux/chrome",
         shutil.which("google-chrome"),
         shutil.which("chromium"),
@@ -70,9 +72,22 @@ def browser():
     import zendriver as uc
     from zendriver.core.config import Config
 
+    # zendriver logs the browser's stderr at INFO when the CDP handshake fails;
+    # keep it so a CI failure shows the real cause instead of the generic hint.
+    logging.getLogger("zendriver").setLevel(logging.INFO)
+
     async def start():
         args = nc.get_nodriver_browser_args() + ["--disable-gpu", "--no-sandbox", "--disable-dev-shm-usage"]
-        conf = Config(browser_args=args, sandbox=False, headless=True, browser_executable_path=CHROME)
+        conf = Config(
+            browser_args=args,
+            sandbox=False,
+            headless=True,
+            browser_executable_path=CHROME,
+            # A cold Chrome start on a CI runner can take several seconds; the
+            # zendriver default (0.25s x 10 tries) gives up too early.
+            browser_connection_timeout=1.0,
+            browser_connection_max_tries=30,
+        )
         return await uc.start(conf)
 
     loop = asyncio.new_event_loop()

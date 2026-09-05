@@ -1,16 +1,22 @@
 """refresh_datetime parsing in the bot entry point (nodriver_tixcraft.py)."""
 
+import io
 import sys
 from datetime import date, datetime
 
 import pytest
 
-# On Windows the entry point re-wraps stdout/stderr as UTF-8 at import time;
-# restore pytest's capture streams afterwards so output capture keeps working.
+# On Windows the entry point re-wraps sys.stdout/sys.stderr in a new
+# TextIOWrapper at import time. Wrapping pytest's capture streams would close
+# them when the wrapper is garbage-collected, so import against throw-away
+# streams and put pytest's back afterwards.
 _streams = (sys.stdout, sys.stderr)
-import nodriver_tixcraft as bot  # noqa: E402
-
-sys.stdout, sys.stderr = _streams
+sys.stdout = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
+sys.stderr = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
+try:
+    import nodriver_tixcraft as bot
+finally:
+    sys.stdout, sys.stderr = _streams
 
 
 @pytest.mark.parametrize("value", ["", "   ", None])

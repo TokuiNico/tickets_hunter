@@ -68,6 +68,14 @@ jobs:
       - name: Install
         run: uv sync
 
+      - name: Install Playwright Chromium for the browser-backed tests (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          uv run playwright install --with-deps chromium
+          CHROME=$(uv run python -c "from playwright.sync_api import sync_playwright as s; p = s().start(); print(p.chromium.executable_path); p.stop()")
+          echo "TICKETS_HUNTER_E2E_CHROMIUM=$CHROME" >> "$GITHUB_ENV"
+          echo "Using $CHROME"
+
       - name: Run unit tests
         run: uv run pytest tests/unit --cov=src --cov-report=term-missing --cov-report=xml --junitxml=junit-unit.xml
 
