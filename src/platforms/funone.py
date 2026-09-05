@@ -4,7 +4,7 @@
 
 import asyncio
 import base64
-import re
+import time
 
 try:
     import ddddocr

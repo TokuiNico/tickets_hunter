@@ -48,7 +48,6 @@ const show_timestamp = document.querySelector('#show_timestamp');
 
 
 const ocr_captcha_enable = document.querySelector('#ocr_captcha_enable');
-const ocr_captcha_image_source = document.querySelector('#ocr_captcha_image_source');
 const ocr_captcha_force_submit = document.querySelector('#ocr_captcha_force_submit');
 const ocr_captcha_use_universal = document.querySelector('#ocr_captcha_use_universal');
 const remote_url = document.querySelector('#remote_url');
@@ -539,7 +538,6 @@ function renderAdvancedTabTranslations() {
     setRowLabelForField('verbose', fieldLabel('Verbose logs', 'verbose'));
     setRowLabelForField('show_timestamp', fieldLabel('Show timestamps', 'show_timestamp'));
     setRowLabelForField('ocr_captcha_enable', fieldLabel('OCR', 'ocr_captcha_enable'));
-    setRowLabelForField('ocr_captcha_image_source', fieldLabel('OCR image source', 'ocr_captcha_image_source'));
     setRowLabelForField('ocr_captcha_force_submit', fieldLabel('Auto-submit', 'ocr_captcha_force_submit'));
     setRowLabelForField('ocr_captcha_use_universal', fieldLabel('Use universal model', 'ocr_captcha_use_universal'));
     setRowLabelForField('remote_url', fieldLabel('OCR server URL', 'remote_url'));
@@ -1199,7 +1197,6 @@ function load_settins_to_form(settings)
 
 
         ocr_captcha_enable.checked = settings.ocr_captcha.enable;
-        ocr_captcha_image_source.value  = settings.ocr_captcha.image_source;
         ocr_captcha_force_submit.checked = settings.ocr_captcha.force_submit;
 
         if(settings.ocr_captcha.use_universal !== undefined) {
@@ -1513,7 +1510,6 @@ function save_changes_to_dict(silent_flag)
 
 
             settings.ocr_captcha.enable = ocr_captcha_enable.checked;
-            settings.ocr_captcha.image_source = ocr_captcha_image_source.value;
             settings.ocr_captcha.force_submit = ocr_captcha_force_submit.checked;
             settings.ocr_captcha.use_universal = ocr_captcha_use_universal.checked;
 

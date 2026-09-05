@@ -27,26 +27,17 @@ except Exception:
 
 
 # ===== Constants =====
-
-CONST_APP_VERSION = "TicketsHunter (2026.08.17)"
-
-CONST_MAXBOT_ANSWER_ONLINE_FILE = "MAXBOT_ONLINE_ANSWER.txt"
-CONST_MAXBOT_CONFIG_FILE = "settings.json"
-CONST_MAXBOT_INT28_FILE = "MAXBOT_INT28_IDLE.txt"
-CONST_MAXBOT_INT28_QUIT_FILE = "MAXBOT_INT28_QUIT.txt"
-CONST_MAXBOT_LAST_URL_FILE = "MAXBOT_LAST_URL.txt"
-CONST_MAXBOT_QUESTION_FILE = "MAXBOT_QUESTION.txt"
-
-CONST_FROM_TOP_TO_BOTTOM = "from top to bottom"
-CONST_FROM_BOTTOM_TO_TOP = "from bottom to top"
-CONST_CENTER = "center"
-CONST_RANDOM = "random"
-CONST_OCR_CAPTCH_IMAGE_SOURCE_NON_BROWSER = "NonBrowser"
-CONST_OCR_CAPTCH_IMAGE_SOURCE_CANVAS = "canvas"
-
-CONST_WEBDRIVER_TYPE_NODRIVER = "nodriver"
-CONST_CHROME_FAMILY = ["chrome","edge","brave"]
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
+# Defined once in util.py / settings.py; re-exported here so platform modules
+# can keep importing them from nodriver_common.
+from util import CONST_FROM_TOP_TO_BOTTOM
+from settings import (
+    CONST_MAXBOT_ANSWER_ONLINE_FILE,
+    CONST_MAXBOT_CONFIG_FILE,
+    CONST_MAXBOT_INT28_FILE,
+    CONST_MAXBOT_INT28_QUIT_FILE,
+    CONST_MAXBOT_LAST_URL_FILE,
+    CONST_MAXBOT_QUESTION_FILE,
+)
 
 # ===== Cloudflare bypass settings =====
 # "auto"   - auto silent mode (recommended for daily use)
@@ -969,29 +960,6 @@ async def evaluate_with_pause_check(tab, javascript_code, config_dict=None):
         print(f"[JS ERROR] JavaScript execution failed: {exc}")
         traceback.print_exc()
         return None
-
-async def with_pause_check(task_func, config_dict, *args, **kwargs):
-    """wrapper function with pause interrupt support"""
-    # Check pause state once first
-    if await check_and_handle_pause(config_dict):
-        return None
-
-    # Create task but don't await immediately
-    task = asyncio.create_task(task_func(*args, **kwargs))
-
-    # Periodically check pause state during task execution
-    while not task.done():
-        if await check_and_handle_pause(config_dict):
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-            return None
-        await asyncio.sleep(0.05)  # check every 50ms
-
-    return await task
-
 
 # ===== Browser Initialization =====
 

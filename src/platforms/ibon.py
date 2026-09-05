@@ -9,9 +9,7 @@ import asyncio
 import json
 import os
 import random
-import re
 import time
-import traceback
 import webbrowser
 
 from zendriver import cdp
@@ -29,11 +27,8 @@ from nodriver_common import (
     send_discord_notification,
     send_telegram_notification,
     write_question_to_file,
-    CONST_FROM_TOP_TO_BOTTOM,
     CONST_MAXBOT_ANSWER_ONLINE_FILE,
     CONST_MAXBOT_INT28_FILE,
-    CONST_OCR_CAPTCH_IMAGE_SOURCE_CANVAS,
-    CONST_OCR_CAPTCH_IMAGE_SOURCE_NON_BROWSER,
 )
 
 # Backward-compatible alias (function moved to nodriver_common)
@@ -257,8 +252,6 @@ async def nodriver_ibon_date_auto_select_pierce(tab, config_dict):
     """
     from zendriver import cdp
     from zendriver.cdp import runtime
-    import random
-    import json
 
     debug = util.create_debug_logger(config_dict)
     auto_select_mode = config_dict["date_auto_select"]["mode"]
@@ -594,8 +587,6 @@ async def nodriver_ibon_date_auto_select_domsnapshot(tab, config_dict):
     參考：NoDriver API Guide 範例 1
     """
     from zendriver import cdp
-    from zendriver.cdp import input_ as cdp_input
-    import random
 
     debug = util.create_debug_logger(config_dict)
     auto_select_mode = config_dict["date_auto_select"]["mode"]
@@ -3508,7 +3499,7 @@ async def nodriver_ibon_verification_question(tab, fail_list, config_dict):
             # Step 3: If no user dictionary and auto_guess enabled, try auto-guess
             if len(answer_list) == 0:
                 if config_dict["advanced"].get("auto_guess_options", False):
-                    answer_list = util.get_answer_list_from_question_string(None, question_text, config_dict)
+                    answer_list = util.get_answer_list_from_question_string(question_text, config_dict)
                     debug.log(f"[IBON VERIFY] Auto-guessed answers: {answer_list}")
 
             # Step 4: Fill the form if we have answers
@@ -3856,7 +3847,7 @@ async def nodriver_tour_ibon_checkout(tab, config_dict):
 
     return is_form_submitted
 
-async def nodriver_ibon_main(tab, url, config_dict, ocr, Captcha_Browser):
+async def nodriver_ibon_main(tab, url, config_dict, ocr):
     # 函數開始時檢查暫停
     if await check_and_handle_pause(config_dict):
         return False
@@ -3933,17 +3924,6 @@ async def nodriver_ibon_main(tab, url, config_dict, ocr, Captcha_Browser):
             debug.log(f"[IBON LOGIN] Navigation to ibon base failed: {e}")
 
         return False  # Don't quit bot, continue monitoring
-
-    home_url_list = ['https://ticket.ibon.com.tw/'
-    ,'https://ticket.ibon.com.tw/index/entertainment'
-    ]
-    for each_url in home_url_list:
-        if each_url == url.lower():
-            if config_dict["ocr_captcha"]["enable"]:
-                # TODO:
-                #set_non_browser_cookies(driver, url, Captcha_Browser)
-                pass
-            break
 
     # Auto-redirect if kicked back to homepage (防止被踢回首頁)
     # Pattern: Homepage → Target page redirection
@@ -4589,10 +4569,6 @@ async def nodriver_ibon_main(tab, url, config_dict, ocr, Captcha_Browser):
                     model_name = model_name[:7]
                 captcha_url = '/pic.aspx?TYPE=%s' % (model_name)
 
-                # Set cookies for Captcha_Browser if needed
-                if not Captcha_Browser is None:
-                    Captcha_Browser.set_domain(domain_name, captcha_url=captcha_url)
-
                 ocr = None
                 if config_dict["ocr_captcha"]["enable"]:
                     try:
@@ -4742,10 +4718,6 @@ async def nodriver_ibon_main(tab, url, config_dict, ocr, Captcha_Browser):
                         if len(model_name) > 7:
                             model_name=model_name[:7]
                         captcha_url = '/pic.aspx?TYPE=%s' % (model_name)
-
-                        # Set cookies for Captcha_Browser if needed
-                        if not Captcha_Browser is None:
-                            Captcha_Browser.set_domain(domain_name, captcha_url=captcha_url)
 
                         ocr = None
                         if config_dict["ocr_captcha"]["enable"]:

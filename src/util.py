@@ -1,6 +1,5 @@
 import json
 import os
-import pathlib
 import platform
 import random
 import re
@@ -8,11 +7,9 @@ import socket
 import subprocess
 import sys
 import threading
-from datetime import datetime
 from typing import Optional
 
 import requests
-import uuid
 
 CONST_FROM_TOP_TO_BOTTOM = "from top to bottom"
 CONST_FROM_BOTTOM_TO_TOP = "from bottom to top"
@@ -23,35 +20,6 @@ CONST_RANDOM = "random"
 CONST_KEYWORD_DELIMITER = ';'  # New delimiter (semicolon)
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
-
-def get_ip_address():
-    gethostname = None
-    try:
-        gethostname = socket.gethostname()
-    except Exception as exc:
-        print("gethostname", exc)
-        gethostname = None
-
-    default_ip = "127.0.0.1"
-    ip = default_ip
-
-    check_public_ip = True    
-    if "macos" in platform.platform().lower():
-        if "arm64" in platform.platform().lower():
-            check_public_ip = False
-
-    if check_public_ip and not gethostname is None:
-        try:
-            ip = [l for l in ([ip for ip in socket.gethostbyname_ex(gethostname)[2]
-                if not ip.startswith("127.")][:1], [[(s.connect(('8.8.8.8', 53)),
-                s.getsockname()[0], s.close()) for s in [socket.socket(socket.AF_INET,
-                socket.SOCK_DGRAM)]][0][1]]) if l][0][0]
-        except Exception as exc:
-            print("gethostbyname_ex", exc)
-            ip = gethostname
-    
-    #print("get_ip_address:", ip)
-    return ip
 
 def is_connectable(port: int, host: Optional[str] = "localhost") -> bool:
     """Tries to connect to the server at port to see if it is running.
@@ -88,12 +56,6 @@ def find_between( s, first, last ):
         ret = s[start:end]
     except ValueError:
         pass
-    return ret
-
-def is_arm():
-    ret = False
-    if "-arm" in platform.platform():
-        ret = True
     return ret
 
 def get_app_root():
@@ -301,15 +263,6 @@ def force_remove_file(filepath):
             pass
 
 
-def t_or_f(arg):
-    ret = False
-    ua = str(arg).upper()
-    if 'TRUE'.startswith(ua):
-        ret = True
-    elif 'YES'.startswith(ua):
-        ret = True
-    return ret
-
 def format_keyword_string(keyword):
     """
     Minimal keyword formatting - no normalization.
@@ -347,19 +300,6 @@ def format_quota_string(formated_html_text):
     formated_html_text = formated_html_text.replace(')','】')
     return formated_html_text
 
-def full2half(keyword):
-    n = ""
-    if not keyword is None:
-        if len(keyword) > 0:
-            for char in keyword:
-                num = ord(char)
-                if num == 0x3000:
-                    num = 32
-                elif 0xFF01 <= num <= 0xFF5E:
-                    num -= 0xfee0
-                n += chr(num)
-    return n
-
 def get_chinese_numeric():
     my_dict = {}
     my_dict['0']=['0','０','zero','零']
@@ -373,16 +313,6 @@ def get_chinese_numeric():
     my_dict['8']=['8','８','eight','八','捌','⑧','❽','⑻']
     my_dict['9']=['9','９','nine','九','玖','⑨','❾','⑼']
     return my_dict
-
-# 同義字
-def synonym_dict(char):
-    ret = []
-    my_dict = get_chinese_numeric()
-    if char in my_dict:
-        ret = my_dict[char]
-    else:
-        ret.append(char)
-    return ret
 
 def chinese_numeric_to_int(char):
     ret = None
@@ -447,26 +377,6 @@ def is_all_alpha_or_numeric(text):
 
     #print("text/is_all_alpha_or_numeric:",text,ret)
     return ret
-
-def get_brave_bin_path():
-    brave_path = ""
-    if platform.system() == 'Windows':
-        brave_path = "C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe"
-        if not os.path.exists(brave_path):
-            brave_path = os.path.expanduser('~') + "\\AppData\\Local\\BraveSoftware\\Brave-Browser\\Application\\brave.exe"
-        if not os.path.exists(brave_path):
-            brave_path = "C:\\Program Files (x86)\\BraveSoftware\\Brave-Browser\\Application\\brave.exe"
-        if not os.path.exists(brave_path):
-            brave_path = "D:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe"
-
-    if platform.system() == 'Linux':
-        brave_path = "/usr/bin/brave-browser"
-
-    if platform.system() == 'Darwin':
-        brave_path = '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser'
-
-    return brave_path
-
 
 # convert web string to reg pattern
 def convert_string_to_pattern(my_str, dynamic_length=True):
@@ -1443,7 +1353,7 @@ def guess_tixcraft_question(driver, question_text, config_dict=None):
 
     if inferred_answer_string is None:
         if len(question_text) > 0:
-            answer_list = get_answer_list_from_question_string(None, question_text, config_dict)
+            answer_list = get_answer_list_from_question_string(question_text, config_dict)
     else:
         answer_list = [answer_list]
 
@@ -1576,268 +1486,7 @@ def check_answer_keep_symbol(captcha_text_div_text):
 
     return is_need_keep_symbol
 
-def kktix_get_web_datetime(registrationsNewApp_div, config_dict=None):
-    debug = create_debug_logger(config_dict)
-
-    web_datetime = None
-
-    is_found_web_datetime = False
-
-    el_web_datetime_list = None
-    if not registrationsNewApp_div is None:
-        try:
-            el_web_datetime_list = registrationsNewApp_div.find_elements(By.TAG_NAME, 'td')
-        except Exception as exc:
-            debug.log("find td.ng-binding Exception")
-            debug.log(exc)
-            pass
-        #print("is_found_web_datetime", is_found_web_datetime)
-
-    if not el_web_datetime_list is None:
-        el_web_datetime_list_count = len(el_web_datetime_list)
-        if el_web_datetime_list_count > 0:
-            el_web_datetime = None
-            for el_web_datetime in el_web_datetime_list:
-                el_web_datetime_text = None
-                try:
-                    el_web_datetime_text = el_web_datetime.text
-                    debug.log("el_web_datetime_text:", el_web_datetime_text)
-                except Exception as exc:
-                    debug.log('parse web datetime fail:')
-                    debug.log(exc)
-                    pass
-
-                if not el_web_datetime_text is None:
-                    if len(el_web_datetime_text) > 0:
-                        now = datetime.now()
-                        #print("now:", now)
-                        for guess_year in range(now.year,now.year+3):
-                            current_year = str(guess_year)
-                            if current_year in el_web_datetime_text:
-                                if '/' in el_web_datetime_text:
-                                    web_datetime = el_web_datetime_text
-                                    is_found_web_datetime = True
-                                    break
-                        if is_found_web_datetime:
-                            break
-    else:
-        print("find td.ng-binding fail")
-
-    debug.log('is_found_web_datetime:', is_found_web_datetime)
-    debug.log('web_datetime:', web_datetime)
-
-    return web_datetime
-
-def get_answer_string_from_web_date(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, registrationsNewApp_div, captcha_text_div_text, config_dict=None):
-    debug = create_debug_logger(config_dict)
-
-    inferred_answer_string = None
-
-    is_need_parse_web_datetime = False
-    # '半形阿拉伯數字' & '半形數字'
-    if '半形' in captcha_text_div_text and '字' in captcha_text_div_text:
-        if '演出日期' in captcha_text_div_text:
-            is_need_parse_web_datetime = True
-        if '活動日期' in captcha_text_div_text:
-            is_need_parse_web_datetime = True
-        if '表演日期' in captcha_text_div_text:
-            is_need_parse_web_datetime = True
-        if '開始日期' in captcha_text_div_text:
-            is_need_parse_web_datetime = True
-        if '演唱會日期' in captcha_text_div_text:
-            is_need_parse_web_datetime = True
-        if '展覽日期' in captcha_text_div_text:
-            is_need_parse_web_datetime = True
-        if '音樂會日期' in captcha_text_div_text:
-            is_need_parse_web_datetime = True
-    if 'the date of the show you purchased' in captcha_text_div_text:
-        is_need_parse_web_datetime = True
-
-    debug.log("is_need_parse_web_datetime:", is_need_parse_web_datetime)
-
-    if is_need_parse_web_datetime:
-        web_datetime = kktix_get_web_datetime(registrationsNewApp_div, config_dict)
-        if not web_datetime is None:
-            debug.log("web_datetime:", web_datetime)
-
-            captcha_text_formatted = format_question_string(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captcha_text_div_text)
-            debug.log("captcha_text_formatted", captcha_text_formatted)
-
-            my_datetime_foramted = None
-
-            # MMDD
-            if my_datetime_foramted is None:
-                if '4位半形' in captcha_text_formatted:
-                    my_datetime_foramted = "%m%d"
-
-            # for "如為2月30日，請輸入0230"
-            if my_datetime_foramted is None:
-                right_part = ""
-                if CONST_EXAMPLE_SYMBOL in captcha_text_formatted:
-                    right_part = captcha_text_formatted.split(CONST_EXAMPLE_SYMBOL)[1]
-
-                if CONST_INPUT_SYMBOL in right_part:
-                    right_part = right_part.split(CONST_INPUT_SYMBOL)[1]
-                    number_text = find_continuous_number(right_part)
-
-                    my_anwser_formated = convert_string_to_pattern(number_text, dynamic_length=False)
-                    if my_anwser_formated == "[\\d][\\d][\\d][\\d][\\d][\\d][\\d][\\d]":
-                        my_datetime_foramted = "%Y%m%d"
-                    if my_anwser_formated == "[\\d][\\d][\\d][\\d]":
-                        my_datetime_foramted = "%m%d"
-                    #print("my_datetime_foramted:", my_datetime_foramted)
-
-            debug.log("my_datetime_foramted", my_datetime_foramted)
-
-            if my_datetime_foramted is None:
-                now = datetime.now()
-                for guess_year in range(now.year-4,now.year+2):
-                    current_year = str(guess_year)
-                    if current_year in captcha_text_formatted:
-                        my_hint_index = captcha_text_formatted.find(current_year)
-                        my_hint_anwser = captcha_text_formatted[my_hint_index:]
-                        #print("my_hint_anwser:", my_hint_anwser)
-                        # get after.
-                        my_delimitor_symbol = CONST_EXAMPLE_SYMBOL
-                        if my_delimitor_symbol in my_hint_anwser:
-                            my_delimitor_index = my_hint_anwser.find(my_delimitor_symbol)
-                            my_hint_anwser = my_hint_anwser[my_delimitor_index+len(my_delimitor_symbol):]
-                        #print("my_hint_anwser:", my_hint_anwser)
-                        # get before.
-                        my_delimitor_symbol = '，'
-                        if my_delimitor_symbol in my_hint_anwser:
-                            my_delimitor_index = my_hint_anwser.find(my_delimitor_symbol)
-                            my_hint_anwser = my_hint_anwser[:my_delimitor_index]
-                        my_delimitor_symbol = '。'
-                        if my_delimitor_symbol in my_hint_anwser:
-                            my_delimitor_index = my_hint_anwser.find(my_delimitor_symbol)
-                            my_hint_anwser = my_hint_anwser[:my_delimitor_index]
-                        # PS: space may not is delimitor...
-                        my_delimitor_symbol = ' '
-                        if my_delimitor_symbol in my_hint_anwser:
-                            my_delimitor_index = my_hint_anwser.find(my_delimitor_symbol)
-                            my_hint_anwser = my_hint_anwser[:my_delimitor_index]
-                        #remove last char.
-                        remove_last_char_list = [')','(','.','。','）','（','[',']']
-                        for check_char in remove_last_char_list:
-                            if my_hint_anwser[-1:]==check_char:
-                                my_hint_anwser = my_hint_anwser[:-1]
-
-                        my_anwser_formated = convert_string_to_pattern(my_hint_anwser, dynamic_length=False)
-                        if my_anwser_formated == "[\\d][\\d][\\d][\\d][\\d][\\d][\\d][\\d]":
-                            my_datetime_foramted = "%Y%m%d"
-                        if my_anwser_formated == "[\\d][\\d][\\d][\\d]/[\\d][\\d]/[\\d][\\d]":
-                            my_datetime_foramted = "%Y/%m/%d"
-
-                        debug.log("my_hint_anwser:", my_hint_anwser)
-                        debug.log("my_anwser_formated:", my_anwser_formated)
-                        debug.log("my_datetime_foramted:", my_datetime_foramted)
-                        break
-
-            if not my_datetime_foramted is None:
-                my_delimitor_symbol = ' '
-                if my_delimitor_symbol in web_datetime:
-                    web_datetime = web_datetime[:web_datetime.find(my_delimitor_symbol)]
-                date_time = datetime.strptime(web_datetime,"%Y/%m/%d")
-                debug.log("our web date_time:", date_time)
-                ans = None
-                try:
-                    if not date_time is None:
-                        ans = date_time.strftime(my_datetime_foramted)
-                except Exception as exc:
-                    pass
-                inferred_answer_string = ans
-                debug.log("web date_time anwser:", ans)
-
-    return inferred_answer_string
-
-def get_answer_string_from_web_time(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, registrationsNewApp_div, captcha_text_div_text, config_dict=None):
-    debug = create_debug_logger(config_dict)
-
-    inferred_answer_string = None
-
-    # parse '演出時間'
-    is_need_parse_web_time = False
-    if '半形' in captcha_text_div_text:
-        if '演出時間' in captcha_text_div_text:
-            is_need_parse_web_time = True
-        if '表演時間' in captcha_text_div_text:
-            is_need_parse_web_time = True
-        if '開始時間' in captcha_text_div_text:
-            is_need_parse_web_time = True
-        if '演唱會時間' in captcha_text_div_text:
-            is_need_parse_web_time = True
-        if '展覽時間' in captcha_text_div_text:
-            is_need_parse_web_time = True
-        if '音樂會時間' in captcha_text_div_text:
-            is_need_parse_web_time = True
-        if 'the time of the show you purchased' in captcha_text_div_text:
-            is_need_parse_web_time = True
-
-    #print("is_need_parse_web_time", is_need_parse_web_time)
-    if is_need_parse_web_time:
-        web_datetime = None
-        if not registrationsNewApp_div is None:
-            web_datetime = kktix_get_web_datetime(registrationsNewApp_div, config_dict)
-        if not web_datetime is None:
-            tmp_text = format_question_string(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captcha_text_div_text)
-
-            my_datetime_foramted = None
-
-            if my_datetime_foramted is None:
-                my_hint_anwser = tmp_text
-
-                my_delimitor_symbol = CONST_EXAMPLE_SYMBOL
-                if my_delimitor_symbol in my_hint_anwser:
-                    my_delimitor_index = my_hint_anwser.find(my_delimitor_symbol)
-                    my_hint_anwser = my_hint_anwser[my_delimitor_index+len(my_delimitor_symbol):]
-                #print("my_hint_anwser:", my_hint_anwser)
-                # get before.
-                my_delimitor_symbol = '，'
-                if my_delimitor_symbol in my_hint_anwser:
-                    my_delimitor_index = my_hint_anwser.find(my_delimitor_symbol)
-                    my_hint_anwser = my_hint_anwser[:my_delimitor_index]
-                my_delimitor_symbol = '。'
-                if my_delimitor_symbol in my_hint_anwser:
-                    my_delimitor_index = my_hint_anwser.find(my_delimitor_symbol)
-                    my_hint_anwser = my_hint_anwser[:my_delimitor_index]
-                # PS: space may not is delimitor...
-                my_delimitor_symbol = ' '
-                if my_delimitor_symbol in my_hint_anwser:
-                    my_delimitor_index = my_hint_anwser.find(my_delimitor_symbol)
-                    my_hint_anwser = my_hint_anwser[:my_delimitor_index]
-                my_anwser_formated = convert_string_to_pattern(my_hint_anwser, dynamic_length=False)
-                #print("my_hint_anwser:", my_hint_anwser)
-                #print("my_anwser_formated:", my_anwser_formated)
-                if my_anwser_formated == "[\\d][\\d][\\d][\\d]":
-                    my_datetime_foramted = "%H%M"
-                    if '12小時' in tmp_text:
-                        my_datetime_foramted = "%I%M"
-
-                if my_anwser_formated == "[\\d][\\d]:[\\d][\\d]":
-                    my_datetime_foramted = "%H:%M"
-                    if '12小時' in tmp_text:
-                        my_datetime_foramted = "%I:%M"
-
-            if not my_datetime_foramted is None:
-                date_delimitor_symbol = '('
-                if date_delimitor_symbol in web_datetime:
-                    date_delimitor_symbol_index = web_datetime.find(date_delimitor_symbol)
-                    if date_delimitor_symbol_index > 8:
-                        web_datetime = web_datetime[:date_delimitor_symbol_index-1]
-                date_time = datetime.strptime(web_datetime,"%Y/%m/%d %H:%M")
-                #print("date_time:", date_time)
-                ans = None
-                try:
-                    ans = date_time.strftime(my_datetime_foramted)
-                except Exception as exc:
-                    pass
-                inferred_answer_string = ans
-                #print("my_anwser:", ans)
-
-    return inferred_answer_string
-
-def get_answer_list_from_question_string(registrationsNewApp_div, captcha_text_div_text, config_dict=None):
+def get_answer_list_from_question_string(captcha_text_div_text, config_dict=None):
     debug = create_debug_logger(config_dict)
 
     inferred_answer_string = None
@@ -1971,14 +1620,6 @@ def get_answer_list_from_question_string(registrationsNewApp_div, captcha_text_d
             inferred_answer_string = inferred_answer_string.strip()
             #print("find captcha text:" , inferred_answer_string)
 
-    # parse '演出日期'
-    if inferred_answer_string is None:
-        inferred_answer_string = get_answer_string_from_web_date(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, registrationsNewApp_div, captcha_text_div_text, config_dict)
-
-    # parse '演出時間'
-    if inferred_answer_string is None:
-        inferred_answer_string = get_answer_string_from_web_time(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, registrationsNewApp_div, captcha_text_div_text, config_dict)
-
     # name of event.
     if inferred_answer_string is None:
         if "name of event" in captcha_text_div_text:
@@ -2028,55 +1669,6 @@ def get_answer_list_from_question_string(registrationsNewApp_div, captcha_text_d
         answer_list = [inferred_answer_string]
 
     return answer_list
-
-def kktix_get_registerStatus(event_code):
-    html_result = None
-
-    url = "https://kktix.com/g/events/%s/register_info" % (event_code)
-    #print('event_code:',event_code)
-    #print("url:", url)
-
-    headers = {"Accept-Language": "zh-TW,zh;q=0.5", 'User-Agent': USER_AGENT}
-    try:
-        html_result = requests.get(url , headers=headers, timeout=0.7, allow_redirects=False)
-    except Exception as exc:
-        html_result = None
-        print("send reg_info request fail:")
-        print(exc)
-
-    registerStatus = ""
-    if not html_result is None:
-        status_code = html_result.status_code
-        #print("status_code:",status_code)
-        if status_code == 200:
-            html_text = html_result.text
-            #print("html_text:", html_text)
-            try:
-                jsLoads = json.loads(html_text)
-                if 'inventory' in jsLoads:
-                    if 'registerStatus' in jsLoads['inventory']:
-                        registerStatus = jsLoads['inventory']['registerStatus']
-            except Exception as exc:
-                print("load reg_info json fail:")
-                print(exc)
-                pass
-
-    #print("registerStatus:", registerStatus)
-    return registerStatus
-
-def kktix_get_event_code(url):
-    event_code = ""
-    if '/registrations/new' in url:
-        prefix_list = ['.com/events/','.cc/events/']
-        postfix = '/registrations/new'
-
-        for prefix in prefix_list:
-            event_code = find_between(url,prefix,postfix)
-            if len(event_code) > 0:
-                break
-
-    #print('event_code:',event_code)
-    return event_code
 
 def launch_maxbot(script_name="nodriver_tixcraft", filename="", homepage="", kktix_account = "", kktix_password="", window_size="", headless="", instance=""):
     cmd_argument = []
@@ -2210,9 +1802,6 @@ def parse_nodriver_result(result):
 
     # 若不是標準格式，原樣返回
     return result
-
-def get_token():
-    return str(uuid.uuid4().hex)
 
 # =============================================================================
 # Discord Webhook Functions (specs/009-discord-webhook)

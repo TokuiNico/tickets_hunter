@@ -857,28 +857,6 @@ const HELP_CONTENT = {
     link: 'https://github.com/bouob/tickets_hunter/blob/main/guide/settings-guide.md#自動猜測驗證選項auto_guess_options'
   },
 
-  ocr_captcha_image_source: {
-    title: 'OCR 圖片取得方式',
-    short: '驗證碼圖片來源：canvas（預設）或 NonBrowser',
-    detail: `
-      <p>設定程式取得驗證碼圖片的方式。</p>
-      <table class="table table-sm table-bordered">
-        <thead><tr><th>選項</th><th>說明</th></tr></thead>
-        <tbody>
-          <tr>
-            <td><code>canvas</code>（預設）</td>
-            <td>透過 JavaScript Canvas API 從瀏覽器頁面直接擷取驗證碼圖片。適用於大多數情況。</td>
-          </tr>
-          <tr>
-            <td><code>NonBrowser</code></td>
-            <td>啟動獨立的 NonBrowser 視窗來取得驗證碼（需搭配外部驗證碼工具使用）。</td>
-          </tr>
-        </tbody>
-      </table>
-      <p class="mb-0 text-muted small">一般情況保持 <code>canvas</code> 即可，若主瀏覽器無法正確擷取驗證碼才考慮切換為 <code>NonBrowser</code>。</p>`,
-    link: 'https://github.com/bouob/tickets_hunter/blob/main/guide/settings-guide.md#ocr圖片取得方式image_source'
-  },
-
   ocr_captcha_use_universal: {
     title: '使用通用 OCR 模型',
     short: '使用內建通用模型（準確率 99%+），停用改回官方 ddddocr',
@@ -1673,26 +1651,6 @@ const HELP_CONTENT_EN_META = {
       </table>
       <p><strong>Supported platforms:</strong> KKTIX, TixCraft, iBon</p>
       <p class="text-warning-emphasis small mb-0"><strong>Note:</strong> Accuracy depends on the question type. A wrong guess can cause the purchase to fail, so test carefully before relying on it.</p>`,
-  },
-  ocr_captcha_image_source: {
-    title: 'OCR image source',
-    short: 'Choose whether captcha images are captured from canvas (default) or NonBrowser.',
-    detailHtml: `
-      <p>Set how the program captures captcha images for OCR.</p>
-      <table class="table table-sm table-bordered">
-        <thead><tr><th>Option</th><th>Description</th></tr></thead>
-        <tbody>
-          <tr>
-            <td><code>canvas</code> (default)</td>
-            <td>Capture the captcha image directly from the page through the JavaScript Canvas API. Suitable for most cases.</td>
-          </tr>
-          <tr>
-            <td><code>NonBrowser</code></td>
-            <td>Launch a separate NonBrowser window to capture the captcha image. This is intended for use with external captcha tools.</td>
-          </tr>
-        </tbody>
-      </table>
-      <p class="mb-0 text-muted small">In most cases, keep <code>canvas</code>. Switch to <code>NonBrowser</code> only if the main browser cannot capture the captcha correctly.</p>`,
   },
   ocr_captcha_use_universal: {
     title: 'Use universal OCR model',

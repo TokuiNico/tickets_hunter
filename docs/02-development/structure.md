@@ -63,7 +63,6 @@
 ### 主要檔案
 - **nodriver_tixcraft.py** - NoDriver 版本主迴圈 + URL 路由
 - **nodriver_common.py** - 共用瀏覽器基礎設施（DOM 工具、暫停機制、Cloudflare、初始化）
-- **NonBrowser.py** - OCR 輔助模組（被 nodriver_tixcraft.py import）
 - **platforms/facebook.py** - Facebook 登入（2 函式）
 - **platforms/fansigo.py** - FANSI GO 平台（14 函式）
 - **platforms/cityline.py** - Cityline 平台（16 函式）

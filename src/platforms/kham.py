@@ -6,33 +6,18 @@
 # Also includes shared seat selection functions (nodriver_ticket_seat_*)
 # =============================================================================
 
-import asyncio
 import base64
 import json
-import os
-import random
-import re
 import time
-import traceback
-import webbrowser
-
-from zendriver import cdp
 
 import util
 from nodriver_common import (
-    asyncio_sleep_with_pause_check,
     check_and_handle_pause,
-    nodriver_check_checkbox,
     nodriver_force_check_checkbox,
-    nodriver_check_modal_dialog_popup,
     nodriver_get_captcha_image_from_dom_snapshot,
     play_sound_while_ordering,
     send_discord_notification,
     send_telegram_notification,
-    write_question_to_file,
-    CONST_FROM_TOP_TO_BOTTOM,
-    CONST_MAXBOT_ANSWER_ONLINE_FILE,
-    CONST_MAXBOT_INT28_FILE,
 )
 
 __all__ = [
@@ -4038,7 +4023,7 @@ async def nodriver_udn_seat_auto_select(tab, config_dict):
                     if (style.includes('icon_chair_empty_1.gif')) {{
                         const title = seat.getAttribute('title');
                         if (title && title.includes('排') && title.includes('號')) {{
-                            // Parse seat info: {區域}-{排號}排-{座號}號
+                            // Parse seat info: {{區域}}-{{排號}}排-{{座號}}號
                             const parts = title.split('-');
                             if (parts.length >= 3) {{
                                 const areaName = parts[0];

@@ -29,7 +29,7 @@ build_scripts\build_and_test.bat
 
 ✅ **自動化測試**
 - 執行 30 秒啟動測試
-- 驗證核心模組載入（util, NonBrowser, ddddocr）
+- 驗證核心模組載入（util, ddddocr）
 - 測試結果保存至 `.temp/test_output.txt`
 
 ✅ **發布 ZIP 生成**
